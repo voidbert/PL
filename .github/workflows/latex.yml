@@ -2,7 +2,7 @@ name: LaTeX checks
 on:
     pull_request:
         paths:
-            - 'reports/**'
+            - 'report/**'
             - '.github/workflows/**'
 
 jobs:
@@ -13,10 +13,10 @@ jobs:
             - run: >-
                 sudo apt update &&
                 sudo apt install -y texlive-{latex-extra,font-utils,lang-portuguese}
-            - run: ./reports/compile.sh
+            - run: ./report/compile.sh
 
     format-reports:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
-            - run: ./reports/format.sh
+            - run: ./report/format.sh
