@@ -17,6 +17,7 @@
 # -------------------------------------------------------------------------------------------------
 
 import sys
+import re
 import ply.lex
 
 class LexerError(ValueError):
@@ -89,10 +90,10 @@ class _Lexer:
             error_underline = ' ' * relative_start + '\033[91m^' + '~' * (length - 1) + '\033[0m'
 
             print(f'{error_location}: \033[91merror\033[0m: {error_description}', file=sys.stderr)
-            print(f'\t{line}', file=sys.stderr)
-            print(f'\t{error_underline}\n', file=sys.stderr)
+            print(f'{lexer.lineno: 6d} | {line}', file=sys.stderr)
+            print(f'         {error_underline}\n', file=sys.stderr)
 
             cls.last_error = None
 
 SOURCE_FILE = '<stdin>'
-lexer = ply.lex.lex(module=_Lexer)
+lexer = ply.lex.lex(module=_Lexer, reflags=re.IGNORECASE)
