@@ -24,7 +24,7 @@ good-names=i,
            _
 
 # Support ply syntax
-good-names-rgxs=^t_[A-Z]+$,
+good-names-rgxs=^t_(ignore_)?[A-Z_]+$,
                 ^p_[^\W\da-z][^\W_]*$
 
 # Include a hint for the correct naming format with invalid-name.
