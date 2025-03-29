@@ -43,9 +43,7 @@ class _Lexer:
     def t_newline(cls, t: ply.lex.LexToken) -> ply.lex.LexToken:
         r'\n+'
 
-        line_end = lexer.lexpos - len(t.value)
-        cls.commit_error(line_end)
-
+        cls.commit_error()
         lexer.lineno += len(t.value)
         cls.line_start = lexer.lexpos
 
@@ -64,27 +62,29 @@ class _Lexer:
                 # Error continuation
                 cls.last_error = start, length + 1
             else:
-                # New error in the same line
-                line_end = lexer.lexdata.find('\n', lexer.lexpos)
-                if line_end == -1:
-                    line_end = lexer.lexlen
-
-                cls.commit_error(line_end)
+                cls.commit_error()
                 cls.last_error = lexer.lexpos, 1
         else:
             # First error in the line
             cls.last_error = lexer.lexpos, 1
-            cls.has_errors = True
 
         lexer.skip(1)
 
     @classmethod
-    def commit_error(cls, line_end: int) -> None:
+    def commit_error(cls) -> None:
         if cls.last_error is not None:
+            # Determine important positions in the text
+            line_end = lexer.lexdata.find('\n', cls.line_start)
+            if line_end == -1:
+                line_end = lexer.lexlen
+
             start, length = cls.last_error
+            relative_start = start - cls.line_start
+            length = min(length, line_end - start)
+
+            # Pretty print error
             line = lexer.lexdata[cls.line_start:line_end]
 
-            relative_start = start - cls.line_start
             error_location = f'{SOURCE_FILE}:{lexer.lineno}:{relative_start + 1}'
             error_description = 'Lexer failed to reconize the following characters here'
             error_underline = ' ' * relative_start + '\033[91m^' + '~' * (length - 1) + '\033[0m'
@@ -93,6 +93,7 @@ class _Lexer:
             print(f'{lexer.lineno: 6d} | {line}', file=sys.stderr)
             print(f'         {error_underline}\n', file=sys.stderr)
 
+            cls.has_errors = True
             cls.last_error = None
 
 SOURCE_FILE = '<stdin>'
