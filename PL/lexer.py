@@ -28,16 +28,123 @@ class _Lexer:
     last_error: tuple[int, int] | None = None # Start position and length of error
     line_start: int = 0                       # Start position of the current line
 
-    tokens = ['NUMBER']
+    literals = '.;:(,)<>=+-*/[]^'
 
-    t_ignore = ' \t\r'
+    keywords = {
+        # Program and blocks
+        'PROGRAM', 'BEGIN', 'END',
+        'LABEL', 'CONST', 'TYPE', 'VAR',
+
+        # Type declarations
+        'ARRAY', 'PACKED', 'SET', 'FILE', 'OF', 'RECORD',
+
+        # Subprograms
+        'FUNCTION', 'PROCEDURE',
+
+        # Control flow
+        'IF', 'THEN', 'ELSE',
+        'FOR', 'TO', 'DOWNTO', 'DO',
+        'WHILE',                     # 'DO' as well
+        'REPEAT', 'UNTIL',
+        'CASE',                      # 'OF' as well
+        'GOTO',
+        'WITH',
+
+        # Operators
+        'AND', 'OR', 'NOT',
+        'IN',
+        'DIV', 'MOD',
+
+        # Values
+        # Must be supported here not to collide with identifiers
+        'NIL'
+    }
+
+    tokens = list(keywords.union({
+        # 6.1.2 - Special-symbols
+        'DIFFERENT',
+        'LE',
+        'GE',
+        'ASSIGN',
+        'RANGE',
+
+        # 6.1.3 - Identifiers
+        'ID',
+
+        # 6.1.4 - Directives
+        # Not supported by the lexer (see ID)
+
+        # 6.1.5 - Numbers
+        'FLOAT',
+        'INTEGER',
+
+        # 6.1.6 - Labels
+        # Not supported by the lexer (see INTEGER)
+
+        # 6.1.7 - Character-strings
+        'STRING',
+
+        # 6.1.8 - Token separators
+        'COMMENT',
+
+        # 6.1.9 - Lexical alternatives
+        'ALT_CARET'
+        'ALT_LBRACKET'
+        'ALT_RBRACKET'
+    }))
+
+    t_DIFFERENT = r'<>'
+    t_LE = r'<='
+    t_GE = r'>='
+    t_ASSIGN = r':='
+    t_RANGE = r'\.\.'
+
+    @classmethod
+    def t_ID(cls, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'[a-z][a-z0-9]*'
+        upper = t.value.upper()
+        if upper in cls.keywords:
+            t.type = upper
+        return t
 
     @staticmethod
-    def t_NUMBER(t : ply.lex.LexToken) -> ply.lex.LexToken:
-        r'[0-9]+'
+    def t_FLOAT(t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'[0-9]+(\.[0-9]+e(\+|\-)?[0-9]+|\.[0-9]+|e(\+|\-)?[0-9]+)'
+        t.value = float(t.value)
+        return t
 
+    @staticmethod
+    def t_INTEGER(t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'[0-9]+'
         t.value = int(t.value)
         return t
+
+    @staticmethod
+    def t_STRING(t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'\'((?:\'\'|[^\'])*)\''
+        t.value = t.value[1:-1].replace('\'\'', '\'')
+        return t
+
+    @staticmethod
+    def t_ALT_CARET(t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'@'
+        t.type = '^'
+        return t
+
+    @staticmethod
+    def t_ALT_LBRACKET(t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'\(\.'
+        t.type = '['
+        return t
+
+    @staticmethod
+    def t_ALT_RBRACKET(t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'\.\)'
+        t.type = ']'
+        return t
+
+    t_ignore = ' \t\r'
+    t_ignore_COMMENT = r'({|\(\*)(.|\n)*?(}|\*\))'
 
     @classmethod
     def t_newline(cls, t: ply.lex.LexToken) -> ply.lex.LexToken:
