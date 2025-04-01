@@ -101,7 +101,7 @@ class _Lexer:
         self.t_RANGE = r'\.\.'
 
         self.t_ignore = ' \t\r'
-        self.t_ignore_COMMENT = r'({|\(\*)(.|\n)*?(}|\*\))'
+        self.t_ignore_COMMENT = r'({|\(\*)((?!{|\(\*)(.|\n))*?(}|\*\))'
 
     def t_ID(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
         r'[a-z][a-z0-9]*'
