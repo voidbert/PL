@@ -19,5 +19,5 @@ jobs:
             - run: |
                 source .venv/bin/activate
                 pip install pylint mypy .
-                pylint plpc
-                mypy plpc
+                pylint plpc tests
+                mypy plpc tests

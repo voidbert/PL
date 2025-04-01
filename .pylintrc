@@ -34,7 +34,7 @@ include-naming-hint=yes
 no-docstring-rgx=.*
 
 # Naming style matching correct module names.
-module-rgx=^__[a-z]+__|[a-z]+$
+module-rgx=^test_[a-z]+|__[a-z]+__|[a-z]+$
 
 [FORMAT]
 

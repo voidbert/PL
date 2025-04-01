@@ -45,9 +45,21 @@ Before opening a Pull Request, please run your code though `pylint` and `mypy`, 
 that may appear:
 
 ```
-$ pylint plpc
-$ mypy plpc
+$ pylint plpc tests
+$ mypy plpc tests
 ```
 
 Our configuration for these checkers disallows the use of dynamic typing, and your PR won't be
 accepted if these checks are failing.
+
+You can also test the compiler using `pytest`. To install it, run:
+
+```
+$ pip install pytest
+```
+
+Then, you can run the tests:
+
+```
+$ pytest
+```
