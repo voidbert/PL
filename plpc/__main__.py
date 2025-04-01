@@ -18,13 +18,14 @@
 
 from pprint import pprint
 import sys
-from .lexer import LexerError, lexer
+from .lexer import LexerError, create_lexer
 
 # pylint: disable=unused-argument
 def main(argv: list[str]) -> None:
     source = sys.stdin.read()
 
     try:
+        lexer = create_lexer('<stdin>')
         lexer.input(source)
         pprint(list(lexer))
     except LexerError:
