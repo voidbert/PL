@@ -53,3 +53,111 @@ def failing_test(source: str) -> Callable[[Callable[[], None]], Callable[[], Non
         return wrapper
 
     return decorator
+
+# ------------------------------------ SINGLE TOKEN TYPE TESTS ------------------------------------
+
+# Empty strings
+
+@successful_test('')
+def test_empty_1() -> list[SimpleToken]:
+    return []
+
+@successful_test('\n\n\r\r\t\n\r')
+def test_empty_2() -> list[SimpleToken]:
+    return []
+
+# Comments
+
+@successful_test('{}')
+def test_empty_comment_1() -> list[SimpleToken]:
+    return []
+
+@successful_test('(**)')
+def test_empty_comment_2() -> list[SimpleToken]:
+    return []
+
+@successful_test('(*}')
+def test_empty_comment_3() -> list[SimpleToken]:
+    return []
+
+@successful_test('{*)')
+def test_empty_comment_4() -> list[SimpleToken]:
+    return []
+
+@successful_test('{Hello! こんにちは}')
+def test_non_empty_comment_1() -> list[SimpleToken]:
+    return []
+
+@successful_test('(*Hello! こんにちは*)')
+def test_non_empty_comment_2() -> list[SimpleToken]:
+    return []
+
+@successful_test('(*Hello! こんにちは}')
+def test_non_empty_comment_3() -> list[SimpleToken]:
+    return []
+
+@failing_test('{')
+def test_unterminated_comment_1() -> None:
+    pass
+
+@failing_test('{{{{{')
+def test_unterminated_comment_2() -> None:
+    pass
+
+@failing_test('{ Hello! こんにちは')
+def test_unterminated_comment_3() -> None:
+    pass
+
+@successful_test('(*')
+def test_fake_unterminated_comment_1() -> list[SimpleToken]:
+    return [('(', '('), ('*', '*')]
+
+@successful_test('(*)')
+def test_fake_unterminated_comment_2() -> list[SimpleToken]:
+    return [('(', '('), ('*', '*'), (')', ')')]
+
+@failing_test('{{}')
+def test_nested_comment_1() -> None:
+    pass
+
+@failing_test('{a{}')
+def test_nested_comment_2() -> None:
+    pass
+
+@failing_test('{{a}')
+def test_nested_comment_3() -> None:
+    pass
+
+@failing_test('{a{b}')
+def test_nested_comment_4() -> None:
+    pass
+
+@failing_test('{(*}')
+def test_nested_comment_5() -> None:
+    pass
+
+@failing_test('{a(*}')
+def test_nested_comment_6() -> None:
+    pass
+
+@failing_test('{(*a}')
+def test_nested_comment_7() -> None:
+    pass
+
+@failing_test('{a(*b}')
+def test_nested_comment_8() -> None:
+    pass
+
+@failing_test('{(*{}')
+def test_nested_comment_9() -> None:
+    pass
+
+@failing_test('{{(*}')
+def test_nested_comment_10() -> None:
+    pass
+
+# Other tokens types here
+
+# ------------------------------------- COMBINATION OF TOKENS -------------------------------------
+
+# Token separation tests here
