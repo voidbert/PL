@@ -23,7 +23,7 @@ To run the project, do:
 ```
 $ source .venv/bin/activate
 $ pip install .
-$ python -m PL
+$ python -m plpc
 ```
 
 To exit the virtual environment, you can run:
@@ -45,8 +45,8 @@ Before opening a Pull Request, please run your code though `pylint` and `mypy`, 
 that may appear:
 
 ```
-$ pylint PL
-$ mypy PL
+$ pylint plpc
+$ mypy plpc
 ```
 
 Our configuration for these checkers disallows the use of dynamic typing, and your PR won't be

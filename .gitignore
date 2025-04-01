@@ -18,4 +18,4 @@ dist/
 
 # LaTeX compilation
 *-eps-converted-to.pdf
-reports/build
+report/build

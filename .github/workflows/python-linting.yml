@@ -2,7 +2,7 @@ name: Python linting
 on:
     pull_request:
         paths:
-            - 'PL/**'
+            - 'plpc/**'
             - '.github/workflows/**'
             - 'pyproject.toml'
             - 'setup.py'
@@ -19,5 +19,5 @@ jobs:
             - run: |
                 source .venv/bin/activate
                 pip install pylint mypy .
-                pylint PL
-                mypy PL
+                pylint plpc
+                mypy plpc

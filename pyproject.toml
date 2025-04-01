@@ -3,7 +3,7 @@
     build-backend = "setuptools.build_meta"
 
 [project]
-    name = "PL"
+    name = "plpc"
     description = "UMinho's 2024/25 Language Processing class assignment"
     version = "0.0.1"
 
