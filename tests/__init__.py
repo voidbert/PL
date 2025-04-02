@@ -15,20 +15,3 @@
 # limitations under the License.
 #
 # -------------------------------------------------------------------------------------------------
-
-from pprint import pprint
-import sys
-from .lexer import LexerError, lexer
-
-# pylint: disable=unused-argument
-def main(argv: list[str]) -> None:
-    source = sys.stdin.read()
-
-    try:
-        lexer.input(source)
-        pprint(list(lexer))
-    except LexerError:
-        print('Lexer failed. Aborting ...', file=sys.stderr)
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
