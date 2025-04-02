@@ -22,8 +22,8 @@ To run the project, do:
 
 ```
 $ source .venv/bin/activate
-$ pip install .
-$ python -m plpc
+$ pip install --editable .
+$ plpc
 ```
 
 To exit the virtual environment, you can run:

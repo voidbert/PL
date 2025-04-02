@@ -20,8 +20,7 @@ from pprint import pprint
 import sys
 from .lexer import LexerError, create_lexer
 
-# pylint: disable=unused-argument
-def main(argv: list[str]) -> None:
+def main() -> None:
     source = sys.stdin.read()
 
     try:
@@ -32,4 +31,4 @@ def main(argv: list[str]) -> None:
         print('Lexer failed. Aborting ...', file=sys.stderr)
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    main()

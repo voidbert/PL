@@ -42,7 +42,10 @@
     "Bug Tracker" = "https://github.com/voidbert/PL/issues"
 
 [tool.setuptools]
-py-modules = []
+packages = ['plpc']
+
+[project.scripts]
+plpc = "plpc.__main__:main"
 
 [tool.mypy]
     disallow_untyped_defs = true
