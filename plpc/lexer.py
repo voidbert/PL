@@ -89,8 +89,8 @@ class _Lexer:
             'COMMENT',
 
             # 6.1.9 - Lexical alternatives
-            'ALT_CARET'
-            'ALT_LBRACKET'
+            'ALT_CARET',
+            'ALT_LBRACKET',
             'ALT_RBRACKET'
         }))
 
