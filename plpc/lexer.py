@@ -119,6 +119,8 @@ class _Lexer:
         self.t_ignore = ' \t\r'
         self.t_ignore_COMMENT = r'({|\(\*)((?!{|\(\*)(.|\n))*?(}|\*\))'
 
+        self.lexer = ply.lex.lex(module=self, reflags=re.IGNORECASE)
+
     def t_ID(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
         r'[a-z][a-z0-9]*'
         upper = t.value.upper()
@@ -162,29 +164,29 @@ class _Lexer:
     def t_newline(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
         r'\n+'
 
-        self.commit_error(t.lexer)
-        t.lexer.lineno += len(t.value)
+        self.commit_error(self.lexer)
+        self.lexer.lineno += len(t.value)
 
     def t_eof(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
         self.t_newline(t) # Commit error if need be
         if self.has_errors:
             raise LexerError()
 
-    def t_error(self, t: ply.lex.LexToken) -> None:
+    def t_error(self, _: ply.lex.LexToken) -> None:
         if self.last_error is not None:
             start, length = self.last_error
 
-            if start + length == t.lexer.lexpos:
+            if start + length == self.lexer.lexpos:
                 # Error continuation
                 self.last_error = start, length + 1
             else:
-                self.commit_error(t.lexer)
-                self.last_error = t.lexer.lexpos, 1
+                self.commit_error(self.lexer)
+                self.last_error = self.lexer.lexpos, 1
         else:
             # First error in the line
-            self.last_error = t.lexer.lexpos, 1
+            self.last_error = self.lexer.lexpos, 1
 
-        t.lexer.skip(1)
+        self.lexer.skip(1)
 
     def commit_error(self, lexer: ply.lex.Lexer) -> None:
         if self.last_error is not None:
@@ -201,4 +203,4 @@ class _Lexer:
             self.last_error = None
 
 def create_lexer(file_path: str) -> ply.lex.Lexer:
-    return ply.lex.lex(module=_Lexer(file_path), reflags=re.IGNORECASE)
+    return _Lexer(file_path).lexer
