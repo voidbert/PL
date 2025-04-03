@@ -195,3 +195,6 @@ class _Lexer:
 
 def create_lexer(file_path: str) -> ply.lex.Lexer:
     return ply.lex.lex(module=_Lexer(file_path), reflags=re.IGNORECASE)
+
+def get_tokens() -> list[str]:
+    return _Lexer('').tokens

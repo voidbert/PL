@@ -16,24 +16,20 @@
 #
 # -------------------------------------------------------------------------------------------------
 
-from pprint import pprint
-import sys
+import ply.yacc
+from .lexer import create_lexer, get_tokens
 
-from .lexer import LexerError
-from .parser import ParserError, create_parser
+class ParserError(ValueError):
+    pass
 
-def main() -> None:
-    source = sys.stdin.read()
+class _Parser:
+    def __init__(self, file_path: str):
+        self.lexer = create_lexer(file_path)
+        self.tokens = get_tokens()
 
-    try:
-        parser = create_parser('<stdin>')
-        ast = parser.parse(source)
+    def p_num(self, p: ply.yacc.YaccProduction) -> None:
+        '''program-definition : INTEGER'''
+        p[0] = p[1]
 
-        pprint(ast)
-    except LexerError:
-        print('Lexer failed. Aborting ...', file=sys.stderr)
-    except ParserError:
-        print('Parser failed. Aborting ...', file=sys.stderr)
-
-if __name__ == '__main__':
-    main()
+def create_parser(file_path: str) -> ply.yacc.LRParser:
+    return ply.yacc.yacc(module=_Parser(file_path), debug=False, write_tables=False)
