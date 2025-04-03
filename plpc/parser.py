@@ -28,15 +28,18 @@ class ParserError(ValueError):
     pass
 
 class _Parser:
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str, start_production: str):
         self.file_path = file_path
         self.has_errors = False
 
         self.lexer = create_lexer(file_path)
         self.tokens = list(self.lexer.lextokens)
-        self.parser = ply.yacc.yacc(module=self, debug=False, write_tables=False)
+        self.parser = ply.yacc.yacc(module=self,
+                                    start=start_production,
+                                    debug=False,
+                                    write_tables=False)
 
-    def p_num(self, p: ply.yacc.YaccProduction) -> None:
+    def p_program_definition(self, p: ply.yacc.YaccProduction) -> None:
         '''program-definition : INTEGER'''
         p[0] = p[1].value
 
@@ -52,7 +55,9 @@ class _Parser:
 
         self.has_errors = True
 
-def create_parser(file_path: str) -> ply.yacc.LRParser:
+def create_parser(file_path: str,
+                  start_production: str = 'program-definition') -> ply.yacc.LRParser:
+
     def parse_wrapper(*args: str, **kwargs: Any) -> Callable[..., ply.yacc.LRParser]:
         ast = old_parse_fn(*args, **kwargs)
         if parser.has_errors:
@@ -60,7 +65,7 @@ def create_parser(file_path: str) -> ply.yacc.LRParser:
 
         return ast
 
-    parser = _Parser(file_path)
+    parser = _Parser(file_path, start_production)
     old_parse_fn = parser.parser.parse
     parser.parser.parse = parse_wrapper
     return parser.parser
