@@ -16,20 +16,51 @@
 #
 # -------------------------------------------------------------------------------------------------
 
+from typing import Any, Callable
+
+import ply.lex
 import ply.yacc
-from .lexer import create_lexer, get_tokens
+
+from .error import print_error
+from .lexer import create_lexer
 
 class ParserError(ValueError):
     pass
 
 class _Parser:
     def __init__(self, file_path: str):
+        self.file_path = file_path
+        self.has_errors = False
+
         self.lexer = create_lexer(file_path)
-        self.tokens = get_tokens()
+        self.tokens = list(self.lexer.lextokens)
+        self.parser = ply.yacc.yacc(module=self, debug=False, write_tables=False)
 
     def p_num(self, p: ply.yacc.YaccProduction) -> None:
         '''program-definition : INTEGER'''
-        p[0] = p[1]
+        p[0] = p[1].value
+
+    def p_error(self, t: ply.lex.LexToken) -> None:
+        string_value = t.value if isinstance(t.value, str) else t.value.string_value
+
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    f'Unexpected token: {string_value}',
+                    t.lexer.lineno,
+                    t.lexpos,
+                    len(string_value))
+
+        self.has_errors = True
 
 def create_parser(file_path: str) -> ply.yacc.LRParser:
-    return ply.yacc.yacc(module=_Parser(file_path), debug=False, write_tables=False)
+    def parse_wrapper(*args: str, **kwargs: Any) -> Callable[..., ply.yacc.LRParser]:
+        ast = old_parse_fn(*args, **kwargs)
+        if parser.has_errors:
+            raise ParserError()
+
+        return ast
+
+    parser = _Parser(file_path)
+    old_parse_fn = parser.parser.parse
+    parser.parser.parse = parse_wrapper
+    return parser.parser
