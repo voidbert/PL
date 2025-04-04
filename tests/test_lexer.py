@@ -156,8 +156,111 @@ def test_nested_comment_9() -> None:
 def test_nested_comment_10() -> None:
     pass
 
-# Other tokens types here
+# Special Symbols
+
+@successful_test('<>')
+def test_different() -> list[SimpleToken]:
+    return [('DIFFERENT', '<>')]
+
+@successful_test('<=')
+def test_le() -> list[SimpleToken]:
+    return [('LE', '<=')]
+
+@successful_test('>=')
+def test_ge() -> list[SimpleToken]:
+    return [('GE', '>=')]
+
+@successful_test(':=')
+def test_assign() -> list[SimpleToken]:
+    return [('ASSIGN', ':=')]
+
+@successful_test('..')
+def test_range() -> list[SimpleToken]:
+    return [('RANGE', '..')]
+
+# Identifiers
+
+@successful_test('x')
+def test_simple_id() -> list[SimpleToken]:
+    return [('ID', 'x')]
+
+@successful_test('myVar123')
+def test_alphanumeric_id() -> list[SimpleToken]:
+    return [('ID', 'myVar123')]
+
+# TODO -> Verify if this is supposed to fail
+#@failing_test('123var')
+#def test_invalid_id() -> None:
+#    pass
+
+@failing_test('_start')
+def test_underscore_id() -> None:
+    pass
+
+# Numbers
+
+@successful_test('42')
+def test_integer() -> list[SimpleToken]:
+    return [('INTEGER', 42)]
+
+@successful_test('3.14')
+def test_float() -> list[SimpleToken]:
+    return [('FLOAT', 3.14)]
+
+@successful_test('1e-5')
+def test_scientific_float() -> list[SimpleToken]:
+    return [('FLOAT', 1e-5)]
+
+# TODO -> Verify if this is supposed to fail
+#@failing_test('12.3.4')
+#def test_invalid_float() -> None:
+#    pass
+
+# Full Strings
+
+@successful_test('\'hello\'')
+def test_string() -> list[SimpleToken]:
+    return [('STRING', 'hello')]
+
+# TODO -> Check if this is supposed to work
+#@successful_test('''"a quote " that quotes"''')
+#def test_escaped_string() -> list[SimpleToken]:
+#    return [('STRING', '"a quote " that quotes"')]
+
+@failing_test('\'unterminated')
+def test_unterminated_string() -> None:
+    pass
+
+# Lexical Alternatives
+
+@successful_test('^')
+def test_alt_caret() -> list[SimpleToken]:
+    return [('^', '^')]
+
+@successful_test('(.')
+def test_alt_lbracket() -> list[SimpleToken]:
+    return [('[', '(.')]
+
+@successful_test('.)')
+def test_alt_rbracket() -> list[SimpleToken]:
+    return [(']', '.)')]
 
 # ------------------------------------- COMBINATION OF TOKENS -------------------------------------
+
+@successful_test('x := 42 + y; { Compute something }')
+def test_combined_tokens() -> list[SimpleToken]:
+    return [
+        ('ID', 'x'),
+        ('ASSIGN', ':='),
+        ('INTEGER', 42),
+        ('+', '+'),
+        ('ID', 'y'),
+        (';', ';'),
+    ]
+
+# TODO -> Check if this is supposed to fail
+#@failing_test('@invalid-char')
+#def test_invalid_char() -> None:
+#    pass
 
 # Token separation tests here
