@@ -17,11 +17,12 @@
 # -------------------------------------------------------------------------------------------------
 
 from typing import Callable
+from typing import Union
 from plpc.lexer import LexerError, create_lexer
 
 # ------------------------------------------ EASE OF USE ------------------------------------------
 
-SimpleToken = tuple[str, str]
+SimpleToken = tuple[str, Union[str, int, float]]
 
 def successful_test(source: str) -> Callable[[Callable[[], list[SimpleToken]]], Callable[[], None]]:
     def decorator(test: Callable[[], list[SimpleToken]]) -> Callable[[], None]:
@@ -229,6 +230,10 @@ def test_string() -> list[SimpleToken]:
 def test_quoted_string() -> list[SimpleToken]:
     return [('STRING', '"A string " with " quotation "marks"')]
 
+@failing_test('résumé Δelta')
+def test_unicode_ids() -> None:
+    pass
+
 @failing_test('\'unterminated')
 def test_unterminated_string() -> None:
     pass
@@ -249,6 +254,29 @@ def test_alt_rbracket() -> list[SimpleToken]:
 
 # ------------------------------------- COMBINATION OF TOKENS -------------------------------------
 
+@successful_test('..:=<>()[];.,')
+def test_literal_combinations() -> list[SimpleToken]:
+    return [
+        ('RANGE', '..'), ('ASSIGN', ':='), ('DIFFERENT', '<>'),
+        ('(', '('), (')', ')'), ('[', '['),
+        (']', ']'), (';', ';'), ('.', '.'), (',', ',')
+    ]
+
+@successful_test('a<=b>=c<>d')
+def test_compound_symbols() -> list[SimpleToken]:
+    return [
+        ('ID', 'a'), ('LE', '<='), ('ID', 'b'),
+        ('GE', '>='), ('ID', 'c'), ('DIFFERENT', '<>'), ('ID', 'd')
+    ]
+
+@successful_test('a := ( b [ 1 ] ) ;')
+def test_spaced_literals() -> list[SimpleToken]:
+    return [
+        ('ID', 'a'), ('ASSIGN', ':='), ('(', '('),
+        ('ID', 'b'), ('[', '['), ('INTEGER', 1),
+        (']', ']'), (')', ')'), (';', ';')
+    ]
+
 @successful_test('x := 42 + y; { Compute something }')
 def test_combined_tokens() -> list[SimpleToken]:
     return [
@@ -261,11 +289,11 @@ def test_combined_tokens() -> list[SimpleToken]:
     ]
 
 @successful_test('12.3.4')
-def test_combined_tokens_2() -> None:
+def test_combined_tokens_2() -> list[SimpleToken]:
     return [('FLOAT', 12.3), ('.', '.'), ('INTEGER', 4)]
 
 @successful_test('@hello-world')
-def test_combined_tokens_3() -> None:
+def test_combined_tokens_3() -> list[SimpleToken]:
     return [('^', '@'), ('ID', 'hello'), ('-', '-'), ('ID', 'world')]
 
 # Program and blocks
@@ -358,11 +386,11 @@ def test_nil_keyword() -> list[SimpleToken]:
 
 # Edge Cases
 
-@successful_test('begin end if then')
-def test_case_insensitivity() -> list[SimpleToken]:
+@successful_test('BeGiN EnD iF tHeN')
+def test_case_insensitive_keywords() -> list[SimpleToken]:
     return [
-        ('BEGIN', 'begin'), ('END', 'end'),
-        ('IF', 'if'), ('THEN', 'then')
+        ('BEGIN', 'BeGiN'), ('END', 'EnD'),
+        ('IF', 'iF'), ('THEN', 'tHeN')
     ]
 
 @successful_test('PROGRAMTest')
