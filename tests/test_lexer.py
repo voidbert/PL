@@ -184,24 +184,28 @@ def test_range() -> list[SimpleToken]:
 def test_simple_id() -> list[SimpleToken]:
     return [('ID', 'x')]
 
-@successful_test('myVar123')
+@successful_test('MyVar123')
 def test_alphanumeric_id() -> list[SimpleToken]:
-    return [('ID', 'myVar123')]
+    return [('ID', 'MyVar123')]
 
-# TODO -> Verify if this is supposed to fail
-#@failing_test('123var')
-#def test_invalid_id() -> None:
-#    pass
+# This test is supposed to fail -> 6.1.3 Identifiers
+@failing_test('123var')
+def test_id_prefixed_by_digit() -> None:
+    pass
 
 @failing_test('_start')
 def test_underscore_id() -> None:
+    pass
+
+@failing_test('hello_world')
+def test_underscore_id_2() -> None:
     pass
 
 # Numbers
 
 @successful_test('42')
 def test_integer() -> list[SimpleToken]:
-    return [('INTEGER', 42)]
+    return [('INTEGER', int('42'))]
 
 @successful_test('3.14')
 def test_float() -> list[SimpleToken]:
@@ -211,10 +215,9 @@ def test_float() -> list[SimpleToken]:
 def test_scientific_float() -> list[SimpleToken]:
     return [('FLOAT', 1e-5)]
 
-# TODO -> Verify if this is supposed to fail
-#@failing_test('12.3.4')
-#def test_invalid_float() -> None:
-#    pass
+@successful_test('87.35E+8')
+def test_scientific_float_2() -> list[SimpleToken]:
+    return [('FLOAT', 87.35E+8)]
 
 # Full Strings
 
@@ -222,10 +225,9 @@ def test_scientific_float() -> list[SimpleToken]:
 def test_string() -> list[SimpleToken]:
     return [('STRING', 'hello')]
 
-# TODO -> Check if this is supposed to work
-#@successful_test('''"a quote " that quotes"''')
-#def test_escaped_string() -> list[SimpleToken]:
-#    return [('STRING', '"a quote " that quotes"')]
+@successful_test('\'"A string " with " quotation "marks"\'')
+def test_quoted_string() -> list[SimpleToken]:
+    return [('STRING', '"A string " with " quotation "marks"')]
 
 @failing_test('\'unterminated')
 def test_unterminated_string() -> None:
@@ -258,9 +260,113 @@ def test_combined_tokens() -> list[SimpleToken]:
         (';', ';'),
     ]
 
-# TODO -> Check if this is supposed to fail
-#@failing_test('@invalid-char')
-#def test_invalid_char() -> None:
-#    pass
+@successful_test('12.3.4')
+def test_combined_tokens_2() -> None:
+    return [('FLOAT', 12.3), ('.', '.'), ('INTEGER', 4)]
 
-# Token separation tests here
+@successful_test('@hello-world')
+def test_combined_tokens_3() -> None:
+    return [('^', '@'), ('ID', 'hello'), ('-', '-'), ('ID', 'world')]
+
+# Program and blocks
+
+@successful_test('PROGRAM Test; BEGIN END.')
+def test_program_structure() -> list[SimpleToken]:
+    return [
+        ('PROGRAM', 'PROGRAM'),
+        ('ID', 'Test'),
+        (';', ';'),
+        ('BEGIN', 'BEGIN'),
+        ('END', 'END'),
+        ('.', '.')
+    ]
+
+@successful_test('LABEL 123; CONST PI=3.14; TYPE Int=INTEGER; VAR x:Real;')
+def test_declaration_keywords() -> list[SimpleToken]:
+    return [
+        ('LABEL', 'LABEL'), ('INTEGER', 123), (';', ';'),
+        ('CONST', 'CONST'), ('ID', 'PI'), ('=', '='), ('FLOAT', 3.14), (';', ';'),
+        ('TYPE', 'TYPE'), ('ID', 'Int'), ('=', '='), ('ID', 'INTEGER'), (';', ';'),
+        ('VAR', 'VAR'), ('ID', 'x'), (':', ':'), ('ID', 'Real'), (';', ';')
+    ]
+
+# Type declarations
+
+@successful_test('ARRAY [1..10] OF INTEGER; PACKED SET OF CHAR; FILE OF RECORD;')
+def test_type_keywords() -> list[SimpleToken]:
+    return [
+        ('ARRAY', 'ARRAY'), ('[', '['), ('INTEGER', 1),
+        ('RANGE', '..'), ('INTEGER', 10), (']', ']'),
+        ('OF', 'OF'), ('ID', 'INTEGER'), (';', ';'),
+        ('PACKED', 'PACKED'), ('SET', 'SET'), ('OF', 'OF'), ('ID', 'CHAR'), (';', ';'),
+        ('FILE', 'FILE'), ('OF', 'OF'), ('RECORD', 'RECORD'), (';', ';')
+    ]
+
+# Subprograms
+
+@successful_test('FUNCTION Foo():Integer; PROCEDURE Bar();')
+def test_subprogram_keywords() -> list[SimpleToken]:
+    return [
+        ('FUNCTION', 'FUNCTION'), ('ID', 'Foo'), ('(', '('), (')', ')'),
+        (':', ':'), ('ID', 'Integer'), (';', ';'),
+        ('PROCEDURE', 'PROCEDURE'), ('ID', 'Bar'), ('(', '('), (')', ')'), (';', ';')
+    ]
+
+# Control flow
+
+@successful_test('''
+IF x THEN y ELSE z;
+FOR i:=1 TO 10 DO;
+WHILE b DO;
+REPEAT UNTIL c;
+CASE x OF 1: END;
+GOTO 99;
+WITH r DO;
+''')
+def test_control_flow() -> list[SimpleToken]:
+    return [
+        ('IF', 'IF'), ('ID', 'x'), ('THEN', 'THEN'), ('ID', 'y'),
+        ('ELSE', 'ELSE'), ('ID', 'z'), (';', ';'),
+        ('FOR', 'FOR'), ('ID', 'i'), ('ASSIGN', ':='), ('INTEGER', 1),
+        ('TO', 'TO'), ('INTEGER', 10), ('DO', 'DO'), (';', ';'),
+        ('WHILE', 'WHILE'), ('ID', 'b'), ('DO', 'DO'), (';', ';'),
+        ('REPEAT', 'REPEAT'), ('UNTIL', 'UNTIL'), ('ID', 'c'), (';', ';'),
+        ('CASE', 'CASE'), ('ID', 'x'), ('OF', 'OF'), ('INTEGER', 1),
+        (':', ':'), ('END', 'END'), (';', ';'),
+        ('GOTO', 'GOTO'), ('INTEGER', 99), (';', ';'),
+        ('WITH', 'WITH'), ('ID', 'r'), ('DO', 'DO'), (';', ';')
+    ]
+
+# Operators
+
+@successful_test('IF (x AND y) OR NOT z THEN a DIV b MOD c IN d')
+def test_operator_keywords() -> list[SimpleToken]:
+    return [
+        ('IF', 'IF'), ('(', '('), ('ID', 'x'), ('AND', 'AND'),
+        ('ID', 'y'), (')', ')'), ('OR', 'OR'), ('NOT', 'NOT'),
+        ('ID', 'z'), ('THEN', 'THEN'), ('ID', 'a'), ('DIV', 'DIV'),
+        ('ID', 'b'), ('MOD', 'MOD'), ('ID', 'c'), ('IN', 'IN'), ('ID', 'd')
+    ]
+
+# Values
+
+@successful_test('ptr := NIL')
+def test_nil_keyword() -> list[SimpleToken]:
+    return [
+        ('ID', 'ptr'), ('ASSIGN', ':='), ('NIL', 'NIL')
+    ]
+
+# Edge Cases
+
+@successful_test('begin end if then')
+def test_case_insensitivity() -> list[SimpleToken]:
+    return [
+        ('BEGIN', 'begin'), ('END', 'end'),
+        ('IF', 'if'), ('THEN', 'then')
+    ]
+
+@successful_test('PROGRAMTest')
+def test_keyword_adjacent_to_id() -> list[SimpleToken]:
+    return [
+        ('ID', 'PROGRAMTest')
+    ]
