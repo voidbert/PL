@@ -18,17 +18,22 @@
 
 from pprint import pprint
 import sys
-from .lexer import LexerError, create_lexer
+
+from .lexer import LexerError
+from .parser import ParserError, create_parser
 
 def main() -> None:
     source = sys.stdin.read()
 
     try:
-        lexer = create_lexer('<stdin>')
-        lexer.input(source)
-        pprint(list(lexer))
+        parser = create_parser('<stdin>')
+        ast = parser.parse(source)
+
+        pprint(ast)
     except LexerError:
         print('Lexer failed. Aborting ...', file=sys.stderr)
+    except ParserError:
+        print('Parser failed. Aborting ...', file=sys.stderr)
 
 if __name__ == '__main__':
     main()

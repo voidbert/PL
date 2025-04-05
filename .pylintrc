@@ -50,6 +50,7 @@ disable=raw-checker-failed,
         locally-disabled,
         suppressed-message,
 
+        duplicate-code,
         missing-module-docstring,
         too-few-public-methods,
         no-else-return,
