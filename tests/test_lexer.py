@@ -190,6 +190,7 @@ def test_alphanumeric_id() -> list[SimpleToken]:
     return [('ID', 'MyVar123')]
 
 # This test is supposed to fail -> 6.1.3 Identifiers
+# identifier = letter { letter | digit } .
 @failing_test('123var')
 def test_id_prefixed_by_digit() -> None:
     pass
@@ -298,103 +299,135 @@ def test_combined_tokens_3() -> list[SimpleToken]:
 
 # Program and blocks
 
-@successful_test('PROGRAM Test; BEGIN END.')
+@successful_test('PROGRAM Test; BEGIN ENd.')
 def test_program_structure() -> list[SimpleToken]:
     return [
         ('PROGRAM', 'PROGRAM'),
         ('ID', 'Test'),
         (';', ';'),
         ('BEGIN', 'BEGIN'),
-        ('END', 'END'),
+        ('END', 'ENd'),
         ('.', '.')
     ]
 
-@successful_test('LABEL 123; CONST PI=3.14; TYPE Int=INTEGER; VAR x:Real;')
-def test_declaration_keywords() -> list[SimpleToken]:
+@successful_test('ProGram tEST; begin EnD.')
+def test_program_structure_insensitive() -> list[SimpleToken]:
     return [
-        ('LABEL', 'LABEL'), ('INTEGER', 123), (';', ';'),
-        ('CONST', 'CONST'), ('ID', 'PI'), ('=', '='), ('FLOAT', 3.14), (';', ';'),
-        ('TYPE', 'TYPE'), ('ID', 'Int'), ('=', '='), ('ID', 'INTEGER'), (';', ';'),
-        ('VAR', 'VAR'), ('ID', 'x'), (':', ':'), ('ID', 'Real'), (';', ';')
-    ]
-
-# Type declarations
-
-@successful_test('ARRAY [1..10] OF INTEGER; PACKED SET OF CHAR; FILE OF RECORD;')
-def test_type_keywords() -> list[SimpleToken]:
-    return [
-        ('ARRAY', 'ARRAY'), ('[', '['), ('INTEGER', 1),
-        ('RANGE', '..'), ('INTEGER', 10), (']', ']'),
-        ('OF', 'OF'), ('ID', 'INTEGER'), (';', ';'),
-        ('PACKED', 'PACKED'), ('SET', 'SET'), ('OF', 'OF'), ('ID', 'CHAR'), (';', ';'),
-        ('FILE', 'FILE'), ('OF', 'OF'), ('RECORD', 'RECORD'), (';', ';')
-    ]
-
-# Subprograms
-
-@successful_test('FUNCTION Foo():Integer; PROCEDURE Bar();')
-def test_subprogram_keywords() -> list[SimpleToken]:
-    return [
-        ('FUNCTION', 'FUNCTION'), ('ID', 'Foo'), ('(', '('), (')', ')'),
-        (':', ':'), ('ID', 'Integer'), (';', ';'),
-        ('PROCEDURE', 'PROCEDURE'), ('ID', 'Bar'), ('(', '('), (')', ')'), (';', ';')
-    ]
-
-# Control flow
-
-@successful_test('''
-IF x THEN y ELSE z;
-FOR i:=1 TO 10 DO;
-WHILE b DO;
-REPEAT UNTIL c;
-CASE x OF 1: END;
-GOTO 99;
-WITH r DO;
-''')
-def test_control_flow() -> list[SimpleToken]:
-    return [
-        ('IF', 'IF'), ('ID', 'x'), ('THEN', 'THEN'), ('ID', 'y'),
-        ('ELSE', 'ELSE'), ('ID', 'z'), (';', ';'),
-        ('FOR', 'FOR'), ('ID', 'i'), ('ASSIGN', ':='), ('INTEGER', 1),
-        ('TO', 'TO'), ('INTEGER', 10), ('DO', 'DO'), (';', ';'),
-        ('WHILE', 'WHILE'), ('ID', 'b'), ('DO', 'DO'), (';', ';'),
-        ('REPEAT', 'REPEAT'), ('UNTIL', 'UNTIL'), ('ID', 'c'), (';', ';'),
-        ('CASE', 'CASE'), ('ID', 'x'), ('OF', 'OF'), ('INTEGER', 1),
-        (':', ':'), ('END', 'END'), (';', ';'),
-        ('GOTO', 'GOTO'), ('INTEGER', 99), (';', ';'),
-        ('WITH', 'WITH'), ('ID', 'r'), ('DO', 'DO'), (';', ';')
-    ]
-
-# Operators
-
-@successful_test('IF (x AND y) OR NOT z THEN a DIV b MOD c IN d')
-def test_operator_keywords() -> list[SimpleToken]:
-    return [
-        ('IF', 'IF'), ('(', '('), ('ID', 'x'), ('AND', 'AND'),
-        ('ID', 'y'), (')', ')'), ('OR', 'OR'), ('NOT', 'NOT'),
-        ('ID', 'z'), ('THEN', 'THEN'), ('ID', 'a'), ('DIV', 'DIV'),
-        ('ID', 'b'), ('MOD', 'MOD'), ('ID', 'c'), ('IN', 'IN'), ('ID', 'd')
-    ]
-
-# Values
-
-@successful_test('ptr := NIL')
-def test_nil_keyword() -> list[SimpleToken]:
-    return [
-        ('ID', 'ptr'), ('ASSIGN', ':='), ('NIL', 'NIL')
-    ]
-
-# Edge Cases
-
-@successful_test('BeGiN EnD iF tHeN')
-def test_case_insensitive_keywords() -> list[SimpleToken]:
-    return [
-        ('BEGIN', 'BeGiN'), ('END', 'EnD'),
-        ('IF', 'iF'), ('THEN', 'tHeN')
+        ('PROGRAM', 'ProGram'),
+        ('ID', 'tEST'),
+        (';', ';'),
+        ('BEGIN', 'begin'),
+        ('END', 'EnD'),
+        ('.', '.')
     ]
 
 @successful_test('PROGRAMTest')
 def test_keyword_adjacent_to_id() -> list[SimpleToken]:
     return [
         ('ID', 'PROGRAMTest')
+    ]
+
+@successful_test('LABeL 123;')
+def test_declaration_label() -> list[SimpleToken]:
+    return [('LABEL', 'LABeL'), ('INTEGER', 123), (';', ';')]
+
+@successful_test('TyPE Int=INTEGER;')
+def test_declaration_type() -> list[SimpleToken]:
+    return [('TYPE', 'TyPE'), ('ID', 'Int'), ('=', '='), ('ID', 'INTEGER'), (';', ';')]
+
+@successful_test('cONST PI=3.14;')
+def test_declaration_const() -> list[SimpleToken]:
+    return [('CONST', 'cONST'), ('ID', 'PI'), ('=', '='), ('FLOAT', 3.14), (';', ';')]
+
+@successful_test('VaR x:Real;')
+def test_declaration_var() -> list[SimpleToken]:
+    return [('VAR', 'VaR'), ('ID', 'x'), (':', ':'), ('ID', 'Real'), (';', ';')]
+
+# Type declarations
+
+@successful_test('ArrAY [1..10] of INTEGER;')
+def test_type_array() -> list[SimpleToken]:
+    return [
+        ('ARRAY', 'ArrAY'), ('[', '['), ('INTEGER', 1),
+        ('RANGE', '..'), ('INTEGER', 10), (']', ']'),
+        ('OF', 'of'), ('ID', 'INTEGER'), (';', ';')
+    ]
+
+@successful_test('PAcKeD set OF char;')
+def test_type_packed() -> list[SimpleToken]:
+    return [('PACKED', 'PAcKeD'), ('SET', 'set'), ('OF', 'OF'), ('ID', 'char'), (';', ';')]
+
+@successful_test('file OF REcorD;')
+def test_type_file() -> list[SimpleToken]:
+    return [('FILE', 'file'), ('OF', 'OF'), ('RECORD', 'REcorD'), (';', ';')]
+
+# Subprograms
+
+@successful_test('Function Foo():Integer;')
+def test_subprogram_function() -> list[SimpleToken]:
+    return [
+        ('FUNCTION', 'Function'), ('ID', 'Foo'), ('(', '('), (')', ')'),
+        (':', ':'), ('ID', 'Integer'), (';', ';')
+    ]
+
+@successful_test('PROCEDURE Bar();')
+def test_subprogram_procedure() -> list[SimpleToken]:
+    return [('PROCEDURE', 'PROCEDURE'), ('ID', 'Bar'), ('(', '('), (')', ')'), (';', ';')]
+
+# Control flow
+
+@successful_test('If x ThEn y ELsE z;')
+def test_control_flow_if() -> list[SimpleToken]:
+    return [
+        ('IF', 'If'), ('ID', 'x'), ('THEN', 'ThEn'), ('ID', 'y'),
+        ('ELSE', 'ELsE'), ('ID', 'z'), (';', ';')
+    ]
+
+@successful_test('FoR i:=1 tO 10 Do;')
+def test_control_flow_for() -> list[SimpleToken]:
+    return [
+        ('FOR', 'FoR'), ('ID', 'i'), ('ASSIGN', ':='), ('INTEGER', 1),
+        ('TO', 'tO'), ('INTEGER', 10), ('DO', 'Do'), (';', ';')
+    ]
+
+@successful_test('WhilE b do;')
+def test_control_flow_while() -> list[SimpleToken]:
+    return [('WHILE', 'WhilE'), ('ID', 'b'), ('DO', 'do'), (';', ';')]
+
+@successful_test('REpeAT UNtiL c;')
+def test_control_flow_repeat() -> list[SimpleToken]:
+    return [('REPEAT', 'REpeAT'), ('UNTIL', 'UNtiL'), ('ID', 'c'), (';', ';')]
+
+@successful_test('casE x OF 1: END;')
+def test_control_flow_case() -> list[SimpleToken]:
+   return [
+        ('CASE', 'casE'), ('ID', 'x'), ('OF', 'OF'), ('INTEGER', 1),
+        (':', ':'), ('END', 'END'), (';', ';')
+   ]
+
+@successful_test('goTo 99;')
+def test_control_flow_goto() -> list[SimpleToken]:
+    return [('GOTO', 'goTo'), ('INTEGER', 99), (';', ';')]
+
+@successful_test('WitH r DO;')
+def test_control_flow_with() -> list[SimpleToken]:
+    return [('WITH', 'WitH'), ('ID', 'r'), ('DO', 'DO'), (';', ';')]
+
+# Operators
+
+@successful_test('If (x AnD y) oR NoT z thEN a DiV b MoD c in d')
+def test_operator_keywords() -> list[SimpleToken]:
+    return [
+        ('IF', 'If'), ('(', '('), ('ID', 'x'), ('AND', 'AnD'),
+        ('ID', 'y'), (')', ')'), ('OR', 'oR'), ('NOT', 'NoT'),
+        ('ID', 'z'), ('THEN', 'thEN'), ('ID', 'a'), ('DIV', 'DiV'),
+        ('ID', 'b'), ('MOD', 'MoD'), ('ID', 'c'), ('IN', 'in'), ('ID', 'd')
+    ]
+
+# Values
+
+@successful_test('ptr := nil')
+def test_nil_keyword() -> list[SimpleToken]:
+    return [
+        ('ID', 'ptr'), ('ASSIGN', ':='), ('NIL', 'nil')
     ]
