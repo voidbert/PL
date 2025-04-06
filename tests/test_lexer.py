@@ -400,10 +400,10 @@ def test_control_flow_repeat() -> list[SimpleToken]:
 
 @successful_test('casE x OF 1: END;')
 def test_control_flow_case() -> list[SimpleToken]:
-   return [
+    return [
         ('CASE', 'casE'), ('ID', 'x'), ('OF', 'OF'), ('INTEGER', 1),
         (':', ':'), ('END', 'END'), (';', ';')
-   ]
+    ]
 
 @successful_test('goTo 99;')
 def test_control_flow_goto() -> list[SimpleToken]:
