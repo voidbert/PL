@@ -189,12 +189,6 @@ def test_simple_id() -> list[SimpleToken]:
 def test_alphanumeric_id() -> list[SimpleToken]:
     return [('ID', 'MyVar123')]
 
-# This test is supposed to fail -> 6.1.3 Identifiers
-# identifier = letter { letter | digit } .
-@failing_test('123var')
-def test_id_prefixed_by_digit() -> None:
-    pass
-
 @failing_test('_start')
 def test_underscore_id() -> None:
     pass
@@ -254,6 +248,10 @@ def test_alt_rbracket() -> list[SimpleToken]:
     return [(']', '.)')]
 
 # ------------------------------------- COMBINATION OF TOKENS -------------------------------------
+
+@successful_test('123variable')
+def test_id_prefixed_by_digit() -> list[SimpleToken]:
+    return [('INTEGER', 123), ('ID', 'variable')]
 
 @successful_test('..:=<>()[];.,')
 def test_literal_combinations() -> list[SimpleToken]:
