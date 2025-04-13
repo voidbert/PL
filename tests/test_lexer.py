@@ -18,11 +18,12 @@
 
 from typing import Callable
 from typing import Union
-from plpc.lexer import LexerError, create_lexer, IntegerTokenValue, FloatTokenValue, StringTokenValue
+from plpc.lexer import LexerError, create_lexer
+from plpc.lexer import IntegerTokenValue, FloatTokenValue, StringTokenValue
 
 # ------------------------------------------ EASE OF USE ------------------------------------------
 
-SimpleToken = tuple[str, Union[str, int, float]]
+SimpleToken = tuple[str, Union[str, IntegerTokenValue, FloatTokenValue, StringTokenValue]]
 
 def successful_test(source: str) -> Callable[[Callable[[], list[SimpleToken]]], Callable[[], None]]:
     def decorator(test: Callable[[], list[SimpleToken]]) -> Callable[[], None]:
@@ -205,7 +206,7 @@ def test_unicode_ids() -> None:
 
 @successful_test('42')
 def test_integer() -> list[SimpleToken]:
-    return [('INTEGER', IntegerTokenValue(value=42, string_value="42"))]
+    return [('INTEGER', IntegerTokenValue(value=42, string_value='42'))]
 
 @successful_test('3.14')
 def test_float() -> list[SimpleToken]:
@@ -256,7 +257,7 @@ def test_alt_rbracket() -> list[SimpleToken]:
 
 @successful_test('123variable')
 def test_id_prefixed_by_digit() -> list[SimpleToken]:
-    return [('INTEGER', IntegerTokenValue(value=123, string_value="123")), ('ID', 'variable')]
+    return [('INTEGER', IntegerTokenValue(value=123, string_value='123')), ('ID', 'variable')]
 
 @successful_test('hello world')
 def test_space_separated_identifiers() -> list[SimpleToken]:
@@ -287,7 +288,11 @@ def test_spaced_literals() -> list[SimpleToken]:
 
 @successful_test('3,14')
 def test_float_comma_separated() -> list[SimpleToken]:
-    return [('INTEGER', IntegerTokenValue(value=3, string_value='3')), (',', ','), ('INTEGER', IntegerTokenValue(value=14, string_value='14'))]
+    return [
+        ('INTEGER', IntegerTokenValue(value=3, string_value='3')),
+        (',', ','),
+        ('INTEGER', IntegerTokenValue(value=14, string_value='14'))
+    ]
 
 @successful_test('x := 42 + y; { Compute something }')
 def test_combined_tokens() -> list[SimpleToken]:
@@ -302,15 +307,23 @@ def test_combined_tokens() -> list[SimpleToken]:
 
 @successful_test('12.3.4')
 def test_combined_tokens_2() -> list[SimpleToken]:
-    return [('FLOAT', FloatTokenValue(value=12.3, string_value='12.3')), ('.', '.'), ('INTEGER', IntegerTokenValue(value=4, string_value='4'))]
+    return [
+        ('FLOAT', FloatTokenValue(value=12.3, string_value='12.3')),
+        ('.', '.'),
+        ('INTEGER', IntegerTokenValue(value=4, string_value='4'))
+    ]
 
 @successful_test('@hello-world')
 def test_combined_tokens_3() -> list[SimpleToken]:
     return [('^', '@'), ('ID', 'hello'), ('-', '-'), ('ID', 'world')]
 
-@successful_test('\'middle section \'\'\' of three quotes\'\'')
+@successful_test('\'section \'\'\' of three quotes\'\'')
 def test_early_string_termination() -> list[SimpleToken]:
-    return [('STRING', StringTokenValue(value='middle section \'', string_value='\'middle section \'\'\'')), ('OF', 'of'), ('ID', 'three'), ('ID', 'quotes'), ('STRING', StringTokenValue(value='', string_value='\'\''))]
+    return [
+        ('STRING', StringTokenValue(value='section \'', string_value='\'section \'\'\'')),
+        ('OF', 'of'), ('ID', 'three'), ('ID', 'quotes'),
+        ('STRING', StringTokenValue(value='', string_value='\'\''))
+    ]
 
 # Program and blocks
 
@@ -344,7 +357,11 @@ def test_keyword_adjacent_to_id() -> list[SimpleToken]:
 
 @successful_test('LABeL 123;')
 def test_declaration_label() -> list[SimpleToken]:
-    return [('LABEL', 'LABeL'), ('INTEGER', IntegerTokenValue(value=123, string_value='123')), (';', ';')]
+    return [
+        ('LABEL', 'LABeL'),
+        ('INTEGER', IntegerTokenValue(value=123, string_value='123')),
+        (';', ';')
+    ]
 
 @successful_test('TyPE Int=INTEGER;')
 def test_declaration_type() -> list[SimpleToken]:
@@ -352,7 +369,10 @@ def test_declaration_type() -> list[SimpleToken]:
 
 @successful_test('cONST PI=3.14;')
 def test_declaration_const() -> list[SimpleToken]:
-    return [('CONST', 'cONST'), ('ID', 'PI'), ('=', '='), ('FLOAT', FloatTokenValue(value=3.14, string_value='3.14')), (';', ';')]
+    return [
+        ('CONST', 'cONST'), ('ID', 'PI'), ('=', '='),
+        ('FLOAT', FloatTokenValue(value=3.14, string_value='3.14')), (';', ';')
+    ]
 
 @successful_test('VaR x:Real;')
 def test_declaration_var() -> list[SimpleToken]:
@@ -401,8 +421,10 @@ def test_control_flow_if() -> list[SimpleToken]:
 @successful_test('FoR i:=1 tO 10 Do;')
 def test_control_flow_for() -> list[SimpleToken]:
     return [
-        ('FOR', 'FoR'), ('ID', 'i'), ('ASSIGN', ':='), ('INTEGER', IntegerTokenValue(value=1, string_value='1')),
-        ('TO', 'tO'), ('INTEGER', IntegerTokenValue(value=10, string_value='10')), ('DO', 'Do'), (';', ';')
+        ('FOR', 'FoR'), ('ID', 'i'), ('ASSIGN', ':='),
+        ('INTEGER', IntegerTokenValue(value=1, string_value='1')),
+        ('TO', 'tO'), ('INTEGER', IntegerTokenValue(value=10, string_value='10')), ('DO', 'Do'),
+        (';', ';')
     ]
 
 @successful_test('WhilE b do;')
@@ -416,13 +438,16 @@ def test_control_flow_repeat() -> list[SimpleToken]:
 @successful_test('casE x OF 1: END;')
 def test_control_flow_case() -> list[SimpleToken]:
     return [
-        ('CASE', 'casE'), ('ID', 'x'), ('OF', 'OF'), ('INTEGER', IntegerTokenValue(value=1, string_value='1')),
-        (':', ':'), ('END', 'END'), (';', ';')
+        ('CASE', 'casE'), ('ID', 'x'), ('OF', 'OF'),
+        ('INTEGER', IntegerTokenValue(value=1, string_value='1')), (':', ':'), ('END', 'END'),
+        (';', ';')
     ]
 
 @successful_test('goTo 99;')
 def test_control_flow_goto() -> list[SimpleToken]:
-    return [('GOTO', 'goTo'), ('INTEGER', IntegerTokenValue(value=99, string_value='99')), (';', ';')]
+    return [
+        ('GOTO', 'goTo'), ('INTEGER', IntegerTokenValue(value=99, string_value='99')), (';', ';')
+    ]
 
 @successful_test('WitH r DO;')
 def test_control_flow_with() -> list[SimpleToken]:
