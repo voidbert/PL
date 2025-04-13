@@ -230,10 +230,9 @@ def test_quoted_string() -> list[SimpleToken]:
     return [('STRING', StringTokenValue(value='"A string " with " quotation "marks"',
                                         string_value='\'"A string " with " quotation "marks"\''))]
 
-# TODO - check behaviour of double single quotes
-@successful_test('\'\'double quoted string\'\'')
+@successful_test('\'\'\'\'')
 def test_double_quoted_string() -> list[SimpleToken]:
-    return [('STRING', StringTokenValue(value='double quoted string', string_value='\'double quoted string\''))]
+    return [('STRING', StringTokenValue(value='\'', string_value='\'\'\'\''))]
 
 @failing_test('\'unterminated')
 def test_unterminated_string() -> None:
@@ -308,6 +307,10 @@ def test_combined_tokens_2() -> list[SimpleToken]:
 @successful_test('@hello-world')
 def test_combined_tokens_3() -> list[SimpleToken]:
     return [('^', '@'), ('ID', 'hello'), ('-', '-'), ('ID', 'world')]
+
+@successful_test('\'middle section \'\'\' of three quotes\'\'')
+def test_early_string_termination() -> list[SimpleToken]:
+    return [('STRING', StringTokenValue(value='middle section \'', string_value='\'middle section \'\'\'')), ('OF', 'of'), ('ID', 'three'), ('ID', 'quotes'), ('STRING', StringTokenValue(value='', string_value='\'\''))]
 
 # Program and blocks
 
