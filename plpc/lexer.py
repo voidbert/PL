@@ -28,17 +28,17 @@ class LexerError(ValueError):
 @dataclasses.dataclass
 class IntegerTokenValue:
     value: int
-    string_value: float
+    string_value: str
 
 @dataclasses.dataclass
 class FloatTokenValue:
     value: float
-    string_value: float
+    string_value: str
 
 @dataclasses.dataclass
 class StringTokenValue:
-    value: float
-    string_value: float
+    value: str
+    string_value: str
 
 class _Lexer:
     def __init__(self, file_path: str):
