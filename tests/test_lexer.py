@@ -197,6 +197,10 @@ def test_underscore_id() -> None:
 def test_underscore_id_2() -> None:
     pass
 
+@failing_test('résumé Δelta')
+def test_unicode_ids() -> None:
+    pass
+
 # Numbers
 
 @successful_test('42')
@@ -226,9 +230,10 @@ def test_quoted_string() -> list[SimpleToken]:
     return [('STRING', StringTokenValue(value='"A string " with " quotation "marks"',
                                         string_value='\'"A string " with " quotation "marks"\''))]
 
-@failing_test('résumé Δelta')
-def test_unicode_ids() -> None:
-    pass
+# TODO - check behaviour of double single quotes
+@successful_test('\'\'double quoted string\'\'')
+def test_double_quoted_string() -> list[SimpleToken]:
+    return [('STRING', StringTokenValue(value='double quoted string', string_value='\'double quoted string\''))]
 
 @failing_test('\'unterminated')
 def test_unterminated_string() -> None:
@@ -254,6 +259,10 @@ def test_alt_rbracket() -> list[SimpleToken]:
 def test_id_prefixed_by_digit() -> list[SimpleToken]:
     return [('INTEGER', IntegerTokenValue(value=123, string_value="123")), ('ID', 'variable')]
 
+@successful_test('hello world')
+def test_space_separated_identifiers() -> list[SimpleToken]:
+    return [('ID', 'hello'), ('ID', 'world')]
+
 @successful_test('..:=<>()[];.,')
 def test_literal_combinations() -> list[SimpleToken]:
     return [
@@ -276,6 +285,10 @@ def test_spaced_literals() -> list[SimpleToken]:
         ('ID', 'b'), ('[', '['), ('INTEGER', IntegerTokenValue(value=1, string_value='1')),
         (']', ']'), (')', ')'), (';', ';')
     ]
+
+@successful_test('3,14')
+def test_float_comma_separated() -> list[SimpleToken]:
+    return [('INTEGER', IntegerTokenValue(value=3, string_value='3')), (',', ','), ('INTEGER', IntegerTokenValue(value=14, string_value='14'))]
 
 @successful_test('x := 42 + y; { Compute something }')
 def test_combined_tokens() -> list[SimpleToken]:
