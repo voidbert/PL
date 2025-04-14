@@ -3,6 +3,7 @@ on:
     pull_request:
         paths:
             - 'plpc/**'
+            - 'tests/**'
             - '.github/workflows/**'
             - 'pyproject.toml'
             - 'setup.py'
