@@ -87,12 +87,7 @@ class _Lexer:
             'STRING',
 
             # 6.1.8 - Token separators
-            'COMMENT',
-
-            # 6.1.9 - Lexical alternatives
-            'ALT_CARET',
-            'ALT_LBRACKET',
-            'ALT_RBRACKET'
+            'COMMENT'
          ]
 
         self.t_DIFFERENT = r'<>'
@@ -267,6 +262,8 @@ class _Lexer:
         converted = t.value[1:-1].replace('\'\'', '\'')
         t.value = StringTokenValue(converted, t.value)
         return t
+
+    # 6.1.9 - Lexical alternatives
 
     def t_ALT_CARET(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
         r'@'
