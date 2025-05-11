@@ -26,4 +26,11 @@ class Program:
 
 @dataclass
 class Block:
-    pass
+    constants: list[ConstantDefinition]
+
+@dataclass
+class ConstantDefinition:
+    name: str
+    value: ConstantValue
+
+ConstantValue = int | float | str
