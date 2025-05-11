@@ -25,6 +25,7 @@ import ply.yacc
 from .ast import *
 from .error import print_error
 from .lexer import create_lexer
+from .symboltable import SymbolTable, SymbolTableError
 
 class ParserError(ValueError):
     pass
@@ -40,6 +41,8 @@ class _Parser:
                                     start=start_production,
                                     debug=False,
                                     write_tables=False)
+
+        self.symbols = SymbolTable(file_path, self.lexer)
 
     def p_program(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -88,11 +91,115 @@ class _Parser:
         p[1].append(p[3])
         p[0] = p[1]
 
-    # pylint: disable=line-too-long
     def p_block(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        block :
+        block : stack-new-scope constant-block
         '''
+        self.symbols.unstack_top_scope()
+        p[0] = Block(p[2])
+
+    def p_stack_new_scope(self, _: ply.yacc.YaccProduction) -> None:
+        '''
+        stack-new-scope :
+        '''
+        self.symbols.stack_new_scope()
+
+    def p_constant_block_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        constant-block :
+        '''
+        p[0] = []
+
+    def p_constant_block_error(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        constant-block : CONST
+        '''
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'At least one constant definition is required in a constant block',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+
+        self.has_errors = True
+        p[0] = []
+
+    def p_constant_block_non_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        constant-block : CONST constant-definition-list
+        '''
+        p[0] = p[2]
+
+    def p_constant_definition_list_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        constant-definition-list : constant-definition
+        '''
+        p[0] = [p[1]]
+
+    def p_constant_definition_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        constant-definition-list : constant-definition-list constant-definition
+        '''
+        p[1].append(p[2])
+        p[0] = p[1]
+
+    def p_constant_definition(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        constant-definition : ID '=' constant ';'
+        '''
+        p[0] = ConstantDefinition(p[1], p[3])
+
+        try:
+            self.symbols.add_constant(p[0], p.lexspan(0))
+        except SymbolTableError:
+            self.has_errors = True
+
+    def p_constant(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        constant : unsigned-constant
+                 | signed-constant
+        '''
+        p[0] = p[1]
+
+    def p_unsigned_constant_id(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unsigned-constant : ID
+        '''
+
+        try:
+            query_result, _ = self.symbols.query_constant(p[1], p.lexspan(0), True)
+            assert query_result is not None
+            p[0] = query_result.value
+        except SymbolTableError:
+            self.has_errors = True
+
+    def p_unsigned_constant_literal(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unsigned-constant : FLOAT
+                          | INTEGER
+                          | STRING
+        '''
+        p[0] = p[1].value
+
+    def p_signed_constant_sign(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        signed-constant : '+' unsigned-constant
+                        | '-' unsigned-constant
+        '''
+
+        if isinstance(p[2], str):
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        f'Type error: unary \'{p[1]}\' operator cannot be applied to a string',
+                        self.lexer.lineno,
+                        p.lexspan(0)[0],
+                        p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+            self.has_errors = True
+        else:
+            multiplier = 1 if p[1] == '+' else -1
+            p[0] = multiplier * p[2]
+
+    # TODO - add error rules telling the user they can't assign an expression to a constant
 
     def p_error(self, t: ply.lex.LexToken) -> None:
         if t is None:
