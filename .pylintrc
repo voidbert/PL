@@ -54,6 +54,7 @@ disable=raw-checker-failed,
         missing-module-docstring,
         too-few-public-methods,
         no-else-return,
+        no-else-raise,
         global-statement,
 
         too-many-ancestors,
