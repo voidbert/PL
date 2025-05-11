@@ -47,37 +47,22 @@ class _Lexer:
         self.last_error: tuple[int, int] | None = None # Start position and length of error
 
         self.literals = '.;:(,)<>=+-*/[]^'
-        self.keywords = {
-            # Program and blocks
+        self.tokens = [
+            # 6.1.2 - Keywords
             'PROGRAM', 'BEGIN', 'END',
             'LABEL', 'CONST', 'TYPE', 'VAR',
-
-            # Type declarations
             'ARRAY', 'PACKED', 'SET', 'FILE', 'OF', 'RECORD',
-
-            # Subprograms
             'FUNCTION', 'PROCEDURE',
-
-            # Control flow
             'IF', 'THEN', 'ELSE',
-            'FOR', 'TO', 'DOWNTO', 'DO',
-            'WHILE',                     # 'DO' as well
-            'REPEAT', 'UNTIL',
-            'CASE',                      # 'OF' as well
+            'FOR', 'TO', 'DOWNTO', 'DO', 'WHILE', 'REPEAT', 'UNTIL',
+            'CASE',
             'GOTO',
             'WITH',
-
-            # Operators
             'AND', 'OR', 'NOT',
             'IN',
             'DIV', 'MOD',
+            'NIL',
 
-            # Values
-            # Must be supported here not to collide with identifiers
-            'NIL'
-        }
-
-        self.tokens = list(self.keywords.union({
             # 6.1.2 - Special-symbols
             'DIFFERENT',
             'LE',
@@ -102,13 +87,8 @@ class _Lexer:
             'STRING',
 
             # 6.1.8 - Token separators
-            'COMMENT',
-
-            # 6.1.9 - Lexical alternatives
-            'ALT_CARET',
-            'ALT_LBRACKET',
-            'ALT_RBRACKET'
-        }))
+            'COMMENT'
+         ]
 
         self.t_DIFFERENT = r'<>'
         self.t_LE = r'<='
@@ -121,11 +101,148 @@ class _Lexer:
 
         self.lexer = ply.lex.lex(module=self, reflags=re.IGNORECASE)
 
+    def t_PROGRAM(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'PROGRAM\b'
+        return t
+
+    def t_BEGIN(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'BEGIN\b'
+        return t
+
+    def t_END(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'END\b'
+        return t
+
+    def t_LABEL(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'LABEL\b'
+        return t
+
+    def t_CONST(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'CONST\b'
+        return t
+
+    def t_TYPE(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'TYPE\b'
+        return t
+
+    def t_VAR(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'VAR\b'
+        return t
+
+    def t_ARRAY(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'ARRAY\b'
+        return t
+
+    def t_PACKED(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'PACKED\b'
+        return t
+
+    def t_SET(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'SET\b'
+        return t
+
+    def t_FILE(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'FILE\b'
+        return t
+
+    def t_OF(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'OF\b'
+        return t
+
+    def t_RECORD(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'RECORD\b'
+        return t
+
+    def t_FUNCTION(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'FUNCTION\b'
+        return t
+
+    def t_PROCEDURE(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'PROCEDURE\b'
+        return t
+
+    def t_IF(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'IF\b'
+        return t
+
+    def t_THEN(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'THEN\b'
+        return t
+
+    def t_ELSE(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'ELSE\b'
+        return t
+
+    def t_FOR(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'FOR\b'
+        return t
+
+    def t_TO(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'TO\b'
+        return t
+
+    def t_DOWNTO(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'DOWNTO\b'
+        return t
+
+    def t_DO(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'DO\b'
+        return t
+
+    def t_WHILE(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'WHILE\b'
+        return t
+
+    def t_REPEAT(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'REPEAT\b'
+        return t
+
+    def t_UNTIL(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'UNTIL\b'
+        return t
+
+    def t_CASE(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'CASE\b'
+        return t
+
+    def t_GOTO(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'GOTO\b'
+        return t
+
+    def t_WITH(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'WITH\b'
+        return t
+
+    def t_AND(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'AND\b'
+        return t
+
+    def t_OR(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'OR\b'
+        return t
+
+    def t_NOT(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'NOT\b'
+        return t
+
+    def t_IN(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'IN\b'
+        return t
+
+    def t_DIV(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'DIV\b'
+        return t
+
+    def t_MOD(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'MOD\b'
+        return t
+
+    def t_NIL(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+        r'NIL\b'
+        return t
+
     def t_ID(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
         r'[a-z][a-z0-9]*'
-        upper = t.value.upper()
-        if upper in self.keywords:
-            t.type = upper
         return t
 
     def t_FLOAT(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
@@ -145,6 +262,8 @@ class _Lexer:
         converted = t.value[1:-1].replace('\'\'', '\'')
         t.value = StringTokenValue(converted, t.value)
         return t
+
+    # 6.1.9 - Lexical alternatives
 
     def t_ALT_CARET(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
         r'@'

@@ -255,6 +255,20 @@ def test_alt_rbracket() -> list[SimpleToken]:
 
 # ------------------------------------- COMBINATION OF TOKENS -------------------------------------
 
+# Simple combinations
+
+@successful_test('IFIF')
+def test_double_keyword_1() -> list[SimpleToken]:
+    return [('ID', 'IFIF')]
+
+@successful_test('IFIFIF')
+def test_double_keyword_2() -> list[SimpleToken]:
+    return [('ID', 'IFIFIF')]
+
+@successful_test('IF IF')
+def test_double_keyword_3() -> list[SimpleToken]:
+    return [('IF', 'IF'), ('IF', 'IF')]
+
 @successful_test('123variable')
 def test_id_prefixed_by_digit() -> list[SimpleToken]:
     return [('INTEGER', IntegerTokenValue(value=123, string_value='123')), ('ID', 'variable')]
