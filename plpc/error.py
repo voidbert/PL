@@ -23,7 +23,8 @@ def print_error(file_path: str,
                 error_message: str,
                 line_number: int,
                 start: int,
-                length: int) -> None:
+                length: int,
+                warning: bool = False) -> None:
 
     # Error position data
     line_start = source.rfind('\n', 0, start) + 1
@@ -38,10 +39,12 @@ def print_error(file_path: str,
     length = min(length, line_end - start)
 
     # Pretty print error
+    color = '\033[93m' if warning else '\033[91m'
+    error_type = 'warning' if warning else 'error'
     line = source[line_start:line_end]
     error_location = f'{file_path}:{line_number}:{relative_start + 1}'
-    error_underline = ' ' * relative_start + '\033[91m^' + '~' * (length - 1) + '\033[0m'
+    error_underline = ' ' * relative_start + color + '^' + '~' * (length - 1) + '\033[0m'
 
-    print(f'{error_location}: \033[91merror\033[0m: {error_message}', file=sys.stderr)
+    print(f'{error_location}: {color}{error_type}\033[0m: {error_message}', file=sys.stderr)
     print(f'{line_number: 6d} | {line}', file=sys.stderr)
     print(f'         {error_underline}\n', file=sys.stderr)
