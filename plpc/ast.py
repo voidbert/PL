@@ -18,7 +18,8 @@
 
 from __future__ import annotations
 from dataclasses import dataclass
-from enum import Enum
+from enum import IntEnum
+from typing import Literal
 
 @dataclass
 class Program:
@@ -30,6 +31,7 @@ class Block:
     constants: list[ConstantDefinition]
     types: list[TypeDefinition]
     variables: list[VariableDefinition]
+    body: BeginEndStatement
 
 @dataclass
 class ConstantDefinition:
@@ -41,10 +43,10 @@ class TypeDefinition:
     name: str
     value: TypeValue
 
-class BuiltInType(Enum):
-    INTEGER = 0
-    REAL = 1
-    BOOLEAN = 2
+class BuiltInType(IntEnum):
+    BOOLEAN = 0
+    INTEGER = 1
+    REAL = 2
     CHAR = 3
     STRING = 4
 
@@ -70,10 +72,29 @@ class ArrayType:
     subtype: TypeDefinition
     dimensions: list[RangeType]
 
-ConstantValue = int | float | bool | str | EnumeratedTypeConstantValue
+ConstantValue = bool | int | float | str | EnumeratedTypeConstantValue
 TypeValue = BuiltInType | PointerType | EnumeratedType | RangeType | ArrayType
 
 @dataclass
 class VariableDefinition:
     name: str
     variable_type: TypeDefinition
+
+@dataclass
+class BinaryOperation:
+    operator: Literal['+', '-', '*', '/', 'div', 'mod',
+                      'and', 'or', 'in',
+                      '=', '<>', '<', '>', '<=', '>=']
+    left: Expression
+    right: Expression
+
+@dataclass
+class UnaryOperation:
+    operator: Literal['+', '-', 'not']
+    sub: Expression
+
+Expression = tuple[ConstantDefinition | BinaryOperation | UnaryOperation, TypeValue]
+
+Statement = type(None)
+
+BeginEndStatement = list[Statement]

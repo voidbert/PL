@@ -16,7 +16,7 @@
 #
 # -------------------------------------------------------------------------------------------------
 
-import ply.yacc
+import ply.lex
 
 from .ast import BuiltInType, ConstantDefinition, TypeDefinition, VariableDefinition
 from .error import print_error
@@ -45,7 +45,8 @@ class SymbolTable:
                 'boolean': TypeDefinition('boolean', BuiltInType.BOOLEAN),
                 'char': TypeDefinition('char', BuiltInType.CHAR),
                 'true': ConstantDefinition('true', True),
-                'false': ConstantDefinition('false', False)
+                'false': ConstantDefinition('false', False),
+                'maxint': ConstantDefinition('maxint', 1 << 16 - 1)
             })
 
     def unstack_top_scope(self) -> None:
