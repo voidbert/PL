@@ -18,15 +18,13 @@
 
 import ply.yacc
 
-from .ast import BuiltInType, ConstantDefinition, TypeDefinition
+from .ast import BuiltInType, ConstantDefinition, TypeDefinition, VariableDefinition
 from .error import print_error
 
 class SymbolTableError(ValueError):
     pass
 
-SymbolValue = ConstantDefinition | TypeDefinition
-
-QueryResult = None | ConstantDefinition | TypeDefinition
+SymbolValue = ConstantDefinition | TypeDefinition | VariableDefinition
 
 class SymbolTable:
     def __init__(self, file_path: str, lexer: ply.lex.Lexer) -> None:
@@ -57,7 +55,7 @@ class SymbolTable:
               identifier: str,
               lexspan: tuple[int, int] = (0, 0),
               error: bool = False,
-              target_object_name: str = 'Object') -> tuple[QueryResult, bool]:
+              target_object_name: str = 'Object') -> tuple[None | SymbolValue, bool]:
 
         identifier_lower = identifier.lower()
 

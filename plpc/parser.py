@@ -94,10 +94,10 @@ class _Parser:
 
     def p_block(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        block : stack-new-scope constant-block type-block
+        block : stack-new-scope constant-block type-block variable-block
         '''
         self.symbols.unstack_top_scope()
-        p[0] = Block(p[2], p[3])
+        p[0] = Block(p[2], p[3], p[4])
 
     def p_stack_new_scope(self, _: ply.yacc.YaccProduction) -> None:
         '''
@@ -439,6 +439,63 @@ class _Parser:
                     p.lexspan(0)[0],
                     p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
         self.has_errors = True
+
+    # 6.5 - Declarations and denotations of variables
+
+    def p_variable_block_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-block :
+        '''
+        p[0] = []
+
+    def p_variable_block_error(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-block : VAR
+        '''
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'At least one variable definition is required in a variable block',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    len('VAR'))
+
+        self.has_errors = True
+        p[0] = []
+
+    def p_variable_block_non_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-block : VAR variable-definition-list
+        '''
+        p[0] = p[2]
+
+    def p_variable_definition_list_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-definition-list : variable-definition
+        '''
+        p[0] = [p[1]]
+
+    def p_variable_definition_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-definition-list : variable-definition-list variable-definition
+        '''
+        p[1].append(p[2])
+        p[0] = p[1]
+
+    def p_variable_definition(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-definition : identifier-list ':' type ';'
+        '''
+
+        ret: list[VariableDefinition] = []
+        for identifier, start in p[1]:
+            try:
+                variable = VariableDefinition(identifier, p[3])
+                self.symbols.add(variable, (start, start + len(identifier)))
+                ret.append(variable)
+            except SymbolTableError:
+                self.has_errors = True
+
+        p[0] = ret
 
     def p_error(self, t: ply.lex.LexToken) -> None:
         if t is None:

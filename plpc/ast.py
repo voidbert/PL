@@ -29,6 +29,7 @@ class Program:
 class Block:
     constants: list[ConstantDefinition]
     types: list[TypeDefinition]
+    variables: list[VariableDefinition]
 
 @dataclass
 class ConstantDefinition:
@@ -71,3 +72,8 @@ class ArrayType:
 
 ConstantValue = int | float | bool | str | EnumeratedTypeConstantValue
 TypeValue = BuiltInType | PointerType | EnumeratedType | RangeType | ArrayType
+
+@dataclass
+class VariableDefinition:
+    name: str
+    variable_type: TypeDefinition
