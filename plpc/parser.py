@@ -26,6 +26,7 @@ from .ast import *
 from .error import print_error
 from .lexer import create_lexer
 from .symboltable import SymbolTable, SymbolTableError
+from .typechecker import TypeCheckerError, get_constant_type, get_constant_ordinal_value
 
 class ParserError(ValueError):
     pass
@@ -82,13 +83,13 @@ class _Parser:
         '''
         identifier-list : ID
         '''
-        p[0] = [p[1]]
+        p[0] = [(p[1], p.lexspan(1)[0])]
 
     def p_identitifier_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
         '''
         identifier-list : identifier-list ',' ID
         '''
-        p[1].append(p[3])
+        p[1].append((p[3], p.lexspan(3)[0]))
         p[0] = p[1]
 
     def p_block(self, p: ply.yacc.YaccProduction) -> None:
@@ -252,16 +253,33 @@ class _Parser:
         '''
         type-definition : ID '=' type ';'
         '''
-        p[0] = TypeDefinition(p[1], p[3])
+
+        type_definition = TypeDefinition(p[1], p[3])
+        p[0] = type_definition
+
+        if isinstance(p[3], list):
+            # Enumerated type
+            for constant in p[3]:
+                constant.value.constant_type = type_definition
 
         try:
             self.symbols.add(p[0], (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1]) - 1))
         except SymbolTableError:
             self.has_errors = True
 
+    def p_type(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        type : type-id
+             | pointer-type
+             | enumerated-type
+             | range-type
+             | structured-type
+        '''
+        p[0] = p[1]
+
     def p_type_id(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        type : ID
+        type-id : ID
         '''
 
         try:
@@ -274,6 +292,153 @@ class _Parser:
             p[0] = query_result.value
         except SymbolTableError:
             self.has_errors = True
+
+    def p_pointer_type(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        pointer-type : '^' type-id
+        '''
+        p[0] = PointerType(p[2])
+
+    def p_enumerated_type(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        enumerated-type : '(' identifier-list ')'
+        '''
+
+        ret: list[ConstantDefinition] = []
+        for i, (identifier, start) in enumerate(p[2]):
+            try:
+                value = EnumeratedTypeConstantValue(identifier, i, None) # type is set later
+                constant = ConstantDefinition(identifier, value)
+                self.symbols.add(constant, (start, start + len(identifier)))
+
+                ret.append(constant)
+            except SymbolTableError:
+                self.has_errors = True
+
+        p[0] = ret
+
+    def p_range_type(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        range-type : constant RANGE constant
+        '''
+
+        type1 = get_constant_type(p[1])
+        type2 = get_constant_type(p[3])
+        if type1 != type2:
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        'Types of elements in range type are different',
+                        self.lexer.lineno,
+                        p.lexspan(0)[0],
+                        p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+            self.has_errors = True
+            return
+
+        try:
+            value1 = get_constant_ordinal_value(p[1])
+            value2 = get_constant_ordinal_value(p[3])
+        except TypeCheckerError:
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        'Type of elements in range type is not ordinal',
+                        self.lexer.lineno,
+                        p.lexspan(0)[0],
+                        p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+            self.has_errors = True
+            return
+
+        if value1 > value2:
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        'Range\'s upper bound is lower than its lower bound',
+                        self.lexer.lineno,
+                        p.lexspan(0)[0],
+                        p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+            self.has_errors = True
+            return
+
+        p[0] = RangeType(p[1], p[3])
+
+    def p_structured_type_unpacked(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        structured-type : unpacked-structured-type
+        '''
+        p[0] = p[1]
+
+    def p_structured_type_packed(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        structured-type : PACKED unpacked-structured-type
+        '''
+
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'Packed structured types are not supported. Ignoring this keyword ...',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    len('PACKED'),
+                    True)
+
+        p[0] = p[2]
+
+    def p_unpacked_structured_type(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unpacked-structured-type : array-type
+                                 | record-type
+                                 | set-type
+                                 | file-type
+        '''
+        p[0] = p[1]
+
+    def p_array_type(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        array-type : ARRAY '[' array-dimensions ']' OF type
+        '''
+        p[0] = ArrayType(p[6], p[3])
+
+    def p_array_dimensions_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        array-dimensions : range-type
+        '''
+        p[0] = [p[1]]
+
+    def p_array_dimensions_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        array-dimensions : array-dimensions ',' range-type
+        '''
+        p[1].append(p[3])
+        p[0] = p[1]
+
+    # TODO - implement records later
+    def p_record_type(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        record-type :
+        '''
+
+    def p_set_type(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        set-type : SET OF type
+        '''
+
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'Set types are not supported',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+        self.has_errors = True
+
+    def p_file_type(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        file-type : FILE OF type
+        '''
+
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'File types are not supported',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+        self.has_errors = True
 
     def p_error(self, t: ply.lex.LexToken) -> None:
         if t is None:

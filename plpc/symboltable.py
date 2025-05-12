@@ -136,4 +136,4 @@ class SymbolTable:
                             lexspan[1] - lexspan[0] + 1,
                             True)
         else:
-            self.scopes[-1][value.name] = value
+            self.scopes[-1][value.name.lower()] = value

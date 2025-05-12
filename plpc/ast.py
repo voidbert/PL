@@ -35,8 +35,6 @@ class ConstantDefinition:
     name: str
     value: ConstantValue
 
-ConstantValue = int | float | bool | str
-
 @dataclass
 class TypeDefinition:
     name: str
@@ -47,5 +45,29 @@ class BuiltInType(Enum):
     REAL = 1
     BOOLEAN = 2
     CHAR = 3
+    STRING = 4
 
-TypeValue = BuiltInType
+@dataclass
+class PointerType:
+    subtype: TypeValue
+
+EnumeratedType = list[ConstantDefinition]
+
+@dataclass
+class EnumeratedTypeConstantValue:
+    name: str
+    value: int
+    constant_type: None | TypeDefinition
+
+@dataclass
+class RangeType:
+    start: ConstantValue
+    end: ConstantValue
+
+@dataclass
+class ArrayType:
+    subtype: TypeDefinition
+    dimensions: list[RangeType]
+
+ConstantValue = int | float | bool | str | EnumeratedTypeConstantValue
+TypeValue = BuiltInType | PointerType | EnumeratedType | RangeType | ArrayType
