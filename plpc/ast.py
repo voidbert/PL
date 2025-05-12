@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 from dataclasses import dataclass
+from enum import Enum
 
 @dataclass
 class Program:
@@ -27,10 +28,24 @@ class Program:
 @dataclass
 class Block:
     constants: list[ConstantDefinition]
+    types: list[TypeDefinition]
 
 @dataclass
 class ConstantDefinition:
     name: str
     value: ConstantValue
 
-ConstantValue = int | float | str
+ConstantValue = int | float | bool | str
+
+@dataclass
+class TypeDefinition:
+    name: str
+    value: TypeValue
+
+class BuiltInType(Enum):
+    INTEGER = 0
+    REAL = 1
+    BOOLEAN = 2
+    CHAR = 3
+
+TypeValue = BuiltInType

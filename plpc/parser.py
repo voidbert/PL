@@ -93,10 +93,10 @@ class _Parser:
 
     def p_block(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        block : stack-new-scope constant-block
+        block : stack-new-scope constant-block type-block
         '''
         self.symbols.unstack_top_scope()
-        p[0] = Block(p[2])
+        p[0] = Block(p[2], p[3])
 
     def p_stack_new_scope(self, _: ply.yacc.YaccProduction) -> None:
         '''
@@ -119,10 +119,12 @@ class _Parser:
                     'At least one constant definition is required in a constant block',
                     self.lexer.lineno,
                     p.lexspan(0)[0],
-                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+                    len('CONST'))
 
         self.has_errors = True
         p[0] = []
+
+    # 6.3 - Constant definitions
 
     def p_constant_block_non_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -150,7 +152,7 @@ class _Parser:
         p[0] = ConstantDefinition(p[1], p[3])
 
         try:
-            self.symbols.add_constant(p[0], p.lexspan(0))
+            self.symbols.add(p[0], (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1]) - 1))
         except SymbolTableError:
             self.has_errors = True
 
@@ -167,7 +169,11 @@ class _Parser:
         '''
 
         try:
-            query_result, _ = self.symbols.query_constant(p[1], p.lexspan(0), True)
+            query_result, _ = \
+                self.symbols.query_constant(p[1],
+                                            (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1]) - 1),
+                                            True)
+
             assert query_result is not None
             p[0] = query_result.value
         except SymbolTableError:
@@ -193,13 +199,81 @@ class _Parser:
                         f'Type error: unary \'{p[1]}\' operator cannot be applied to a string',
                         self.lexer.lineno,
                         p.lexspan(0)[0],
-                        p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+                        1)
             self.has_errors = True
         else:
             multiplier = 1 if p[1] == '+' else -1
             p[0] = multiplier * p[2]
 
     # TODO - add error rules telling the user they can't assign an expression to a constant
+
+    # 6.4 - Type definitions
+
+    def p_type_block_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        type-block :
+        '''
+        p[0] = []
+
+    def p_type_block_error(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        type-block : TYPE
+        '''
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'At least one type definition is required in a type block',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    len('TYPE'))
+
+        self.has_errors = True
+        p[0] = []
+
+    def p_type_block_non_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        type-block : TYPE type-definition-list
+        '''
+        p[0] = p[2]
+
+    def p_type_definition_list_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        type-definition-list : type-definition
+        '''
+        p[0] = [p[1]]
+
+    def p_type_definition_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        type-definition-list : type-definition-list type-definition
+        '''
+        p[1].append(p[2])
+        p[0] = p[1]
+
+    def p_type_definition(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        type-definition : ID '=' type ';'
+        '''
+        p[0] = TypeDefinition(p[1], p[3])
+
+        try:
+            self.symbols.add(p[0], (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1]) - 1))
+        except SymbolTableError:
+            self.has_errors = True
+
+    def p_type_id(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        type : ID
+        '''
+
+        try:
+            query_result, _ = \
+                self.symbols.query_type(p[1],
+                                        (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1]) - 1),
+                                        True)
+
+            assert query_result is not None
+            p[0] = query_result.value
+        except SymbolTableError:
+            self.has_errors = True
 
     def p_error(self, t: ply.lex.LexToken) -> None:
         if t is None:

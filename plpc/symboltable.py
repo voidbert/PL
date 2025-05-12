@@ -18,17 +18,15 @@
 
 import ply.yacc
 
-from .ast import ConstantDefinition
+from .ast import BuiltInType, ConstantDefinition, TypeDefinition
 from .error import print_error
 
 class SymbolTableError(ValueError):
     pass
 
+SymbolValue = ConstantDefinition | TypeDefinition
 
-SymbolValue = ConstantDefinition
-
-QueryConstantResult = None | ConstantDefinition
-QueryResult = None | ConstantDefinition
+QueryResult = None | ConstantDefinition | TypeDefinition
 
 class SymbolTable:
     def __init__(self, file_path: str, lexer: ply.lex.Lexer) -> None:
@@ -38,7 +36,19 @@ class SymbolTable:
         self.scopes: list[dict[str, SymbolValue]] = []
 
     def stack_new_scope(self) -> None:
-        self.scopes.append({})
+        if self.scopes:
+            self.scopes.append({})
+        else:
+            # 6.2.2.10 - Required identifiers are in the scope of the program
+            # 6.4.2 - Required simple types
+            self.scopes.append({
+                'integer': TypeDefinition('integer', BuiltInType.INTEGER),
+                'real': TypeDefinition('real', BuiltInType.REAL),
+                'boolean': TypeDefinition('boolean', BuiltInType.BOOLEAN),
+                'char': TypeDefinition('char', BuiltInType.CHAR),
+                'true': ConstantDefinition('true', True),
+                'false': ConstantDefinition('false', False)
+            })
 
     def unstack_top_scope(self) -> None:
         self.scopes.pop()
@@ -59,7 +69,7 @@ class SymbolTable:
         if error:
             print_error(self.file_path,
                         self.lexer.lexdata,
-                        f'{target_object_name} {identifier} not found',
+                        f'{target_object_name} \'{identifier}\' not found',
                         self.lexer.lineno,
                         lexspan[0],
                         lexspan[1] - lexspan[0] + 1)
@@ -70,14 +80,14 @@ class SymbolTable:
     def query_constant(self,
                        identifier: str,
                        lexspan: tuple[int, int] = (0, 0),
-                       error: bool = False) -> tuple[QueryConstantResult, bool]:
+                       error: bool = False) -> tuple[None | ConstantDefinition, bool]:
 
         query_result, top_scope = self.query(identifier, lexspan, error, 'Constant')
 
         if not isinstance(query_result, ConstantDefinition):
             print_error(self.file_path,
                         self.lexer.lexdata,
-                        f'Object with name {identifier} is not a constant',
+                        f'Object with name \'{identifier}\' is not a constant',
                         self.lexer.lineno,
                         lexspan[0],
                         lexspan[1] - lexspan[0] + 1)
@@ -85,14 +95,32 @@ class SymbolTable:
 
         return query_result, top_scope
 
-    def add_constant(self, constant: ConstantDefinition, lexspan: tuple[int, int]) -> None:
-        query_result, top_scope = self.query(constant.name)
+    def query_type(self,
+                   identifier: str,
+                   lexspan: tuple[int, int] = (0, 0),
+                   error: bool = False) -> tuple[None | TypeDefinition, bool]:
+
+        query_result, top_scope = self.query(identifier, lexspan, error, 'Type')
+
+        if not isinstance(query_result, TypeDefinition):
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        f'Object with name \'{identifier}\' is not a type',
+                        self.lexer.lineno,
+                        lexspan[0],
+                        lexspan[1] - lexspan[0] + 1)
+            raise SymbolTableError()
+
+        return query_result, top_scope
+
+    def add(self, value: SymbolValue, lexspan: tuple[int, int]) -> None:
+        query_result, top_scope = self.query(value.name)
 
         if query_result is not None:
             if top_scope:
                 print_error(self.file_path,
                             self.lexer.lexdata,
-                            f'Object with name {constant.name} already exists at this level',
+                            f'Object with name \'{value.name}\' already exists in this scope',
                             self.lexer.lineno,
                             lexspan[0],
                             lexspan[1] - lexspan[0] + 1)
@@ -102,10 +130,10 @@ class SymbolTable:
                 # TODO - test this when procedures and functions are implemented
                 print_error(self.file_path,
                             self.lexer.lexdata,
-                            f'Shadowing object with name {constant.name}',
+                            f'Shadowing object with name \'{value.name}\'',
                             self.lexer.lineno,
                             lexspan[0],
                             lexspan[1] - lexspan[0] + 1,
                             True)
         else:
-            self.scopes[-1][constant.name] = constant
+            self.scopes[-1][value.name] = value
