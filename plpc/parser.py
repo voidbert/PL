@@ -97,16 +97,76 @@ class _Parser:
 
     def p_block(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        block : stack-new-scope constant-block type-block variable-block begin-end-statement
+        block : stack-new-scope \
+                label-block \
+                constant-block \
+                type-block \
+                variable-block \
+                begin-end-statement \
         '''
         self.symbols.unstack_top_scope()
-        p[0] = Block(p[2], p[3], p[4], p[5])
+        p[0] = Block(p[2], p[3], p[4], p[5], p[6])
 
     def p_stack_new_scope(self, _: ply.yacc.YaccProduction) -> None:
         '''
         stack-new-scope :
         '''
         self.symbols.stack_new_scope()
+
+    def p_label_block_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        label-block :
+        '''
+        p[0] = []
+
+    def p_label_block_error(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        label-block : LABEL
+        '''
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'At least one constant definition is required in a label block',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    len('LABEL'))
+
+        self.has_errors = True
+        p[0] = []
+
+    def p_label_block_non_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        label-block : LABEL label-list ';'
+        '''
+        p[0] = p[2]
+
+    def p_label_list_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        label-list : INTEGER
+        '''
+
+        try:
+            self.symbols.add(p[1].value,
+                             (p.lexspan(1)[0], p.lexspan(1)[0] + len(str(p[1].value)) - 1))
+
+            p[0] = [p[1].value]
+        except SymbolTableError:
+            self.has_errors = True
+
+    def p_label_definition_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        label-list : label-list ',' INTEGER
+        '''
+
+        try:
+            self.symbols.add(p[3].value,
+                             (p.lexspan(3)[0], p.lexspan(3)[0] + len(str(p[3].value)) - 1))
+
+            p[1].append(p[3].value)
+            p[0] = p[1]
+        except SymbolTableError:
+            self.has_errors = True
+
+    # 6.3 - Constant definitions
 
     def p_constant_block_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -127,8 +187,6 @@ class _Parser:
 
         self.has_errors = True
         p[0] = []
-
-    # 6.3 - Constant definitions
 
     def p_constant_block_non_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''

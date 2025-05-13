@@ -24,7 +24,7 @@ from .error import print_error
 class SymbolTableError(ValueError):
     pass
 
-SymbolValue = ConstantDefinition | TypeDefinition | VariableDefinition
+SymbolValue = int | ConstantDefinition | TypeDefinition | VariableDefinition
 
 class SymbolTable:
     def __init__(self, file_path: str, lexer: ply.lex.Lexer) -> None:
@@ -113,13 +113,14 @@ class SymbolTable:
         return query_result, top_scope
 
     def add(self, value: SymbolValue, lexspan: tuple[int, int]) -> None:
-        query_result, top_scope = self.query(value.name)
+        name = str(value) if isinstance(value, int) else value.name
+        query_result, top_scope = self.query(name)
 
         if query_result is not None:
             if top_scope:
                 print_error(self.file_path,
                             self.lexer.lexdata,
-                            f'Object with name \'{value.name}\' already exists in this scope',
+                            f'Object with name \'{name}\' already exists in this scope',
                             self.lexer.lineno,
                             lexspan[0],
                             lexspan[1] - lexspan[0] + 1)
@@ -129,10 +130,10 @@ class SymbolTable:
                 # TODO - test this when procedures and functions are implemented
                 print_error(self.file_path,
                             self.lexer.lexdata,
-                            f'Shadowing object with name \'{value.name}\'',
+                            f'Shadowing object with name \'{name}\'',
                             self.lexer.lineno,
                             lexspan[0],
                             lexspan[1] - lexspan[0] + 1,
                             True)
         else:
-            self.scopes[-1][value.name.lower()] = value
+            self.scopes[-1][name.lower()] = value

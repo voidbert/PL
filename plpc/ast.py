@@ -28,6 +28,7 @@ class Program:
 
 @dataclass
 class Block:
+    labels: list[int]
     constants: list[ConstantDefinition]
     types: list[TypeDefinition]
     variables: list[VariableDefinition]
