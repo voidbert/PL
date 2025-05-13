@@ -46,6 +46,8 @@ class _Parser:
         self.symbols = SymbolTable(file_path, self.lexer)
         self.type_checker = TypeChecker(file_path, self.lexer)
 
+    # 6.2 - Blocks, scopes and activations
+
     def p_program(self, p: ply.yacc.YaccProduction) -> None:
         '''
         program : PROGRAM ID program-arguments ';' block '.'
@@ -165,6 +167,18 @@ class _Parser:
         '''
         p[0] = p[1]
 
+    def p_constant_expression(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        constant : expression
+        '''
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'Full expressions are not allowed in constants',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+        self.has_errors = True
+
     def p_unsigned_constant_id(self, p: ply.yacc.YaccProduction) -> None:
         '''
         unsigned-constant : ID
@@ -202,13 +216,16 @@ class _Parser:
         '''
 
         try:
-            _ = self.type_checker.get_unary_operation_type(UnaryOperation(p[1], p[2]), p.lexspan(0))
+            constant_type = self.type_checker.get_constant_type(p[2])
+            _ = self.type_checker.get_unary_operation_type(
+                UnaryOperation(p[1], (p[2], constant_type)),
+                (p.lexspan(0)[0], p.lexspan(0)[0])
+            )
+
             multiplier = 1 if p[1] == '+' else -1
             p[0] = multiplier * p[2]
         except TypeCheckerError:
             self.has_errors = True
-
-    # TODO - add error rules telling the user they can't assign an expression to a constant
 
     # 6.4 - Type definitions
 
@@ -311,7 +328,7 @@ class _Parser:
             try:
                 value = EnumeratedTypeConstantValue(identifier, i, None) # type is set later
                 constant = ConstantDefinition(identifier, value)
-                self.symbols.add(constant, (start, start + len(identifier)))
+                self.symbols.add(constant, (start, start + len(identifier) - 1))
 
                 ret.append(constant)
             except SymbolTableError:
@@ -324,8 +341,15 @@ class _Parser:
         range-type : constant RANGE constant
         '''
 
-        type1 = self.type_checker.get_constant_type(p[1])
-        type2 = self.type_checker.get_constant_type(p[3])
+        # NOTE: error spans are somewhat off, but it seems to be a yacc bug
+
+        try:
+            type1 = self.type_checker.get_constant_type(p[1])
+            type2 = self.type_checker.get_constant_type(p[3])
+        except TypeCheckerError:
+            self.has_errors = True
+            return
+
         if type1 != type2:
             print_error(self.file_path,
                         self.lexer.lexdata,
@@ -426,7 +450,7 @@ class _Parser:
                     'Set types are not supported',
                     self.lexer.lineno,
                     p.lexspan(0)[0],
-                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+                    len('SET'))
         self.has_errors = True
 
     def p_file_type(self, p: ply.yacc.YaccProduction) -> None:
@@ -439,7 +463,7 @@ class _Parser:
                     'File types are not supported',
                     self.lexer.lineno,
                     p.lexspan(0)[0],
-                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+                    len('FILE'))
         self.has_errors = True
 
     # 6.5 - Declarations and denotations of variables
@@ -492,7 +516,7 @@ class _Parser:
         for identifier, start in p[1]:
             try:
                 variable = VariableDefinition(identifier, p[3])
-                self.symbols.add(variable, (start, start + len(identifier)))
+                self.symbols.add(variable, (start, start + len(identifier) - 1))
                 ret.append(variable)
             except SymbolTableError:
                 self.has_errors = True
@@ -507,14 +531,14 @@ class _Parser:
         '''
         p[0] = p[1]
 
-    def p_expression_double(self, p: ply.yacc.YaccProduction) -> None:
+    def p_expression_multiple(self, p: ply.yacc.YaccProduction) -> None:
         '''
         expression : non-relational-expression relational-operator non-relational-expression
         '''
 
         try:
             operation = BinaryOperation(p[2], p[1], p[3])
-            expression_type = self.type_checker.get_binary_operation_type(operation, p.lexspan(0))
+            expression_type = self.type_checker.get_binary_operation_type(operation, p.lexspan(2))
             p[0] = (operation, expression_type)
         except TypeCheckerError:
             self.has_errors = True
@@ -537,14 +561,14 @@ class _Parser:
         '''
         p[0] = p[1]
 
-    def p_non_relational_expression_double(self, p: ply.yacc.YaccProduction) -> None:
+    def p_non_relational_expression_multiple(self, p: ply.yacc.YaccProduction) -> None:
         '''
         non-relational-expression : non-relational-expression adding-operator term
         '''
 
         try:
             operation = BinaryOperation(p[2], p[1], p[3])
-            expression_type = self.type_checker.get_binary_operation_type(operation, p.lexspan(0))
+            expression_type = self.type_checker.get_binary_operation_type(operation, p.lexspan(2))
             p[0] = (operation, expression_type)
         except TypeCheckerError:
             self.has_errors = True
@@ -557,22 +581,40 @@ class _Parser:
         '''
         p[0] = p[1].lower()
 
-    def p_first_term_signed(self, p: ply.yacc.YaccProduction) -> None:
+    def p_first_term_single(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        first-term : '+' term
-                   | '-' term
+        first-term : first-factor
+        '''
+        p[0] = p[1]
+
+    def p_first_term_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        first-term : first-term multiplying-operator factor
         '''
 
         try:
-            operation = UnaryOperation(p[1].lower(), p[2])
-            expression_type = self.type_checker.get_unary_operation_type(operation, p.lexspan(0))
+            operation = BinaryOperation(p[2], p[1], p[3])
+            expression_type = self.type_checker.get_binary_operation_type(operation, p.lexspan(2))
             p[0] = (operation, expression_type)
         except TypeCheckerError:
             self.has_errors = True
 
-    def p_first_term_unsigned(self, p: ply.yacc.YaccProduction) -> None:
+    def p_first_factor_signed(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        first-term : term
+        first-factor : '+' factor
+                     | '-' factor
+        '''
+
+        try:
+            operation = UnaryOperation(p[1].lower(), p[2])
+            expression_type = self.type_checker.get_unary_operation_type(operation, p.lexspan(1))
+            p[0] = (operation, expression_type)
+        except TypeCheckerError:
+            self.has_errors = True
+
+    def p_first_factor_unsigned(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        first-factor : factor
         '''
         p[0] = p[1]
 
@@ -582,14 +624,14 @@ class _Parser:
         '''
         p[0] = p[1]
 
-    def p_term_double(self, p: ply.yacc.YaccProduction) -> None:
+    def p_term_multiple(self, p: ply.yacc.YaccProduction) -> None:
         '''
         term : term multiplying-operator factor
         '''
 
         try:
             operation = BinaryOperation(p[2], p[1], p[3])
-            expression_type = self.type_checker.get_binary_operation_type(operation, p.lexspan(0))
+            expression_type = self.type_checker.get_binary_operation_type(operation, p.lexspan(2))
             p[0] = (operation, expression_type)
         except TypeCheckerError:
             self.has_errors = True
@@ -633,11 +675,18 @@ class _Parser:
         '''
         # TODO - Only constants for now
         try:
-            constant, _ = self.symbols.query_constant(p[1], p.lexspan(1), True)
+            constant, _ = self.symbols.query_constant(
+                p[1],
+                (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1])),
+                True
+            )
             assert constant is not None
+
             p[0] = (constant, self.type_checker.get_constant_type(constant.value))
         except SymbolTableError:
             self.has_errors = True
+
+    # 6.8 - Statements
 
     def p_begin_end_statement(self, p: ply.yacc.YaccProduction) -> None:
         '''

@@ -62,12 +62,12 @@ class TypeChecker:
     # 6.7.2.3. Boolean operators
     def get_unary_operation_type(self,
                                  operation: UnaryOperation,
-                                 lexspan: tuple[int, int]) -> None | TypeValue:
+                                 lexspan: tuple[int, int]) -> TypeValue:
         try:
             subtype = operation.sub[1]
-        except TypeError:
-            # AST has errors
-            return None
+        except TypeError as e:
+            # Invalid AST
+            raise TypeCheckerError() from e
 
         if operation.operator in ['+', '-'] and subtype in [BuiltInType.INTEGER, BuiltInType.REAL]:
             return subtype
@@ -84,16 +84,17 @@ class TypeChecker:
 
     # 6.7.2.2. Arithmetic operators
     # 6.7.2.3. Boolean operators
+    # 6.7.2.4. Set operators - NOT SUPPORTED
     # 6.7.2.5. Relational operators
     def get_binary_operation_type(self,
                                   operation: BinaryOperation,
-                                  lexspan: tuple[int, int]) -> None | TypeValue:
+                                  lexspan: tuple[int, int]) -> TypeValue:
         try:
             left_type = operation.left[1]
             right_type = operation.right[1]
-        except TypeError:
-            # AST has errors
-            return None
+        except TypeError as e:
+            # Invalid AST
+            raise TypeCheckerError() from e
 
         if operation.operator in ['+', '-', '*'] and \
             left_type in [BuiltInType.INTEGER, BuiltInType.REAL] and \
