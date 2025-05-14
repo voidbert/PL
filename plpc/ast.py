@@ -51,10 +51,6 @@ class BuiltInType(IntEnum):
     CHAR = 3
     STRING = 4
 
-@dataclass
-class PointerType:
-    subtype: TypeValue
-
 EnumeratedType = list[ConstantDefinition]
 
 @dataclass
@@ -67,6 +63,7 @@ class EnumeratedTypeConstantValue:
 class RangeType:
     start: ConstantValue
     end: ConstantValue
+    subtype: TypeValue
 
 @dataclass
 class ArrayType:
@@ -74,12 +71,18 @@ class ArrayType:
     dimensions: list[RangeType]
 
 ConstantValue = bool | int | float | str | EnumeratedTypeConstantValue
-TypeValue = BuiltInType | PointerType | EnumeratedType | RangeType | ArrayType
+TypeValue = BuiltInType | EnumeratedType | RangeType | ArrayType
 
 @dataclass
 class VariableDefinition:
     name: str
-    variable_type: TypeDefinition
+    variable_type: TypeValue
+
+@dataclass
+class VariableUsage:
+    variable: VariableDefinition
+    type: TypeValue
+    indices: list[Expression]
 
 @dataclass
 class BinaryOperation:
@@ -94,8 +97,13 @@ class UnaryOperation:
     operator: Literal['+', '-', 'not']
     sub: Expression
 
-Expression = tuple[ConstantDefinition | BinaryOperation | UnaryOperation, TypeValue]
+Expression = tuple[ConstantDefinition | VariableUsage | BinaryOperation | UnaryOperation, TypeValue]
 
-Statement = type(None)
+@dataclass
+class AssignStatement:
+    left: VariableUsage
+    right: Expression
+
+Statement = AssignStatement
 
 BeginEndStatement = list[Statement]

@@ -349,10 +349,23 @@ class _Parser:
         type : type-id
              | pointer-type
              | enumerated-type
-             | range-type
              | structured-type
         '''
         p[0] = p[1]
+
+    def p_type_range(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        type : range-type
+        '''
+
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'Range type being interpreted as the type of its components',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1,
+                    True)
+        p[0] = p[1].subtype
 
     def p_type_id(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -374,7 +387,13 @@ class _Parser:
         '''
         pointer-type : '^' type-id
         '''
-        p[0] = PointerType(p[2])
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'Pointer types are not supported',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    len('^'))
+        self.has_errors = True
 
     def p_enumerated_type(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -441,7 +460,7 @@ class _Parser:
             self.has_errors = True
             return
 
-        p[0] = RangeType(p[1], p[3])
+        p[0] = RangeType(p[1], p[3], self.type_checker.get_constant_type(p[1]))
 
     def p_structured_type_unpacked(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -477,7 +496,11 @@ class _Parser:
         '''
         array-type : ARRAY '[' array-dimensions ']' OF type
         '''
-        p[0] = ArrayType(p[6], p[3])
+        if isinstance(p[6], ArrayType):
+            p[3].extend(p[6].dimensions)
+            p[0] = ArrayType(p[6].subtype, p[3])
+        else:
+            p[0] = ArrayType(p[6], p[3])
 
     def p_array_dimensions_single(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -492,11 +515,18 @@ class _Parser:
         p[1].append(p[3])
         p[0] = p[1]
 
-    # TODO - implement records later
     def p_record_type(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        record-type :
+        record-type : RECORD
         '''
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'Record types are not supported',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    len('RECORD'))
+        self.has_errors = True
+        raise SyntaxError()
 
     def p_set_type(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -580,6 +610,78 @@ class _Parser:
                 self.has_errors = True
 
         p[0] = ret
+
+    def p_variable_usage(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-usage : ID variable-index-list
+        '''
+        try:
+            definition, _ = self.symbols.query_variable(
+                p[1],
+                (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1])),
+                True
+            )
+            assert definition is not None
+
+            current_type = definition.variable_type
+            for _, index_type in p[2]:
+                try:
+                    current_type = self.type_checker.type_after_indexation(
+                        current_type,
+                        index_type,
+                        p.lexspan(0)
+                    )
+                except TypeCheckerError:
+                    self.has_errors = True
+                    break
+
+            p[0] = VariableUsage(definition, current_type, p[2])
+        except SymbolTableError:
+            self.has_errors = True
+
+    def p_variable_index_list_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-index-list :
+        '''
+        p[0] = []
+
+    def p_variable_index_list_non_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-index-list : variable-indices
+        '''
+        p[0] = p[1]
+
+    def p_variable_indices_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-indices : variable-index
+        '''
+        p[0] = p[1]
+
+    def p_variable_indices_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-indices : variable-indices variable-index
+        '''
+        p[1].extend(p[2])
+        p[0] = p[1]
+
+    def p_variable_index(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-index : '[' index-expression-list ']'
+        '''
+        p[0] = p[2]
+
+    def p_index_expression_list_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        index-expression-list : expression
+        '''
+        p[0] = [p[1]]
+
+    def p_index_expression_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        index-expression-list : index-expression-list ',' expression
+        '''
+        p[1].append(p[3])
+        p[0] = p[1]
 
     # 6.7 - Expressions
 
@@ -727,20 +829,46 @@ class _Parser:
         '''
         p[0] = (p[1], self.type_checker.get_constant_type(p[1]))
 
+    def p_factor_as_id_simple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        factor : factor-id
+        '''
+        p[0] = p[1]
+
+    def p_factor_as_id_indexed(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        factor : factor-id variable-index-list
+        '''
+        if isinstance(p[1], tuple) and isinstance(p[1][0], VariableUsage):
+            p[1] = p[1][0].variable.name
+            self.p_variable_usage(p)
+            p[0] = (p[0], p[0].type)
+        else:
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        'Indexing object that\'s not a variable',
+                        self.lexer.lineno,
+                        p.lexspan(0)[0],
+                        p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+            self.has_errors = True
+
     def p_factor_id(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        factor : ID
+        factor-id : ID
         '''
-        # TODO - Only constants for now
         try:
-            constant, _ = self.symbols.query_constant(
+            obj, _ = self.symbols.query(
                 p[1],
                 (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1])),
                 True
             )
-            assert constant is not None
+            assert obj is not None
 
-            p[0] = (constant, self.type_checker.get_constant_type(constant.value))
+            if isinstance(obj, ConstantDefinition):
+                p[0] = (obj, self.type_checker.get_constant_type(obj.value))
+            elif isinstance(obj, VariableDefinition):
+                p[0] = (VariableUsage(obj, obj.variable_type, []), obj.variable_type)
+
         except SymbolTableError:
             self.has_errors = True
 
@@ -756,7 +884,6 @@ class _Parser:
         '''
         begin-end-statement : BEGIN END
         '''
-        p[0] = []
         print_error(self.file_path,
                     self.lexer.lexdata,
                     'Empty compound statements are not allowed in standard Pascal',
@@ -765,24 +892,49 @@ class _Parser:
                     p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
         self.has_errors = True
 
+        p[0] = []
+
     def p_statement_list_single(self, p: ply.yacc.YaccProduction) -> None:
         '''
         statement-list : statement
         '''
-        p[0] = [p[1]]
+        if p[1] is not None:
+            p[0] = [p[1]]
+        else:
+            p[0] = []
 
     def p_statement_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
         '''
         statement-list : statement-list ';' statement
         '''
-        p[1].append(p[3])
+
+        if p[3] is not None:
+            p[1].append(p[3])
         p[0] = p[1]
+
+    def p_statement_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        statement :
+        '''
 
     def p_statement(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        statement : ID ASSIGN expression
+        statement : variable-usage ASSIGN expression
         '''
-        p[0] = (p[1], p[3])
+
+        if p[1] is not None and \
+            p[3] is not None and \
+            not self.type_checker.can_assign(p[1].type, p[3][1]):
+
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        'Assignment is impossible due to type mismatch',
+                        self.lexer.lineno,
+                        p.lexspan(0)[0],
+                        p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+            self.has_errors = True
+
+        p[0] = AssignStatement(p[1], p[3])
 
     def p_error(self, t: ply.lex.LexToken) -> None:
         if t is None:
@@ -808,6 +960,13 @@ class _Parser:
                         self.lexer.lineno,
                         t.lexpos,
                         len(string_value))
+
+            # Read ahead looking for a closing 'END'
+            while True:
+                tok = self.parser.token()
+                if not tok or tok.type == 'END':
+                    self.parser.errok()
+                    break
 
         self.has_errors = True
 

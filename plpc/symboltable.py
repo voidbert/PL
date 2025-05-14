@@ -112,6 +112,24 @@ class SymbolTable:
 
         return query_result, top_scope
 
+    def query_variable(self,
+                       identifier: str,
+                       lexspan: tuple[int, int] = (0, 0),
+                       error: bool = False) -> tuple[None | VariableDefinition, bool]:
+
+        query_result, top_scope = self.query(identifier, lexspan, error, 'Variable')
+
+        if not isinstance(query_result, VariableDefinition):
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        f'Object with name \'{identifier}\' is not a variable',
+                        self.lexer.lineno,
+                        lexspan[0],
+                        lexspan[1] - lexspan[0] + 1)
+            raise SymbolTableError()
+
+        return query_result, top_scope
+
     def add(self, value: SymbolValue, lexspan: tuple[int, int]) -> None:
         name = str(value) if isinstance(value, int) else value.name
         query_result, top_scope = self.query(name)

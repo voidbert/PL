@@ -136,3 +136,40 @@ class TypeChecker:
                         lexspan[0],
                         lexspan[1] - lexspan[0] + 1)
             raise TypeCheckerError()
+
+    # 6.4.6. Assignment compatibility
+    def can_assign(self, left_type: TypeValue, right_type: TypeValue) -> bool:
+        if left_type == right_type:
+            return True
+        elif left_type == BuiltInType.REAL and right_type == BuiltInType.INTEGER:
+            return True
+
+        return False
+
+    def type_after_indexation(self,
+                              array_type: TypeValue,
+                              index_type: TypeValue,
+                              lexspan: tuple[int, int]) -> TypeValue:
+
+        if not isinstance(array_type, ArrayType):
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        'Indexing value that\'s not an array',
+                        self.lexer.lineno,
+                        lexspan[0],
+                        lexspan[1] - lexspan[0] + 1)
+            raise TypeCheckerError()
+
+        if not self.can_assign(array_type.dimensions[0].subtype, index_type):
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        'Invalid index type',
+                        self.lexer.lineno,
+                        lexspan[0],
+                        lexspan[1] - lexspan[0] + 1)
+            raise TypeCheckerError()
+
+        if len(array_type.dimensions) > 1:
+            return ArrayType(array_type.subtype, array_type.dimensions[1:])
+        else:
+            return array_type.subtype.value
