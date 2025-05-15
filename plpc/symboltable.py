@@ -18,13 +18,14 @@
 
 import ply.lex
 
-from .ast import BuiltInType, ConstantDefinition, TypeDefinition, VariableDefinition
+from .ast import \
+    BuiltInType, ConstantDefinition, LabelDefinition, TypeDefinition, VariableDefinition
 from .error import print_error
 
 class SymbolTableError(ValueError):
     pass
 
-SymbolValue = int | ConstantDefinition | TypeDefinition | VariableDefinition
+SymbolValue = LabelDefinition | ConstantDefinition | TypeDefinition | VariableDefinition
 
 class SymbolTable:
     def __init__(self, file_path: str, lexer: ply.lex.Lexer) -> None:
@@ -75,6 +76,32 @@ class SymbolTable:
             raise SymbolTableError()
 
         return None, False
+
+    def query_label(self,
+                    identifier: str,
+                    lexspan: tuple[int, int] = (0, 0),
+                    error: bool = False) -> LabelDefinition:
+
+        query_result, top_scope = self.query(str(identifier), lexspan, error, 'Label')
+
+        if not isinstance(query_result, LabelDefinition):
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        f'Object with name \'{identifier}\' is not a label',
+                        self.lexer.lineno,
+                        lexspan[0],
+                        lexspan[1] - lexspan[0] + 1)
+            raise SymbolTableError()
+        elif not top_scope:
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        f'Label \'{identifier}\' not in the top-most scope',
+                        self.lexer.lineno,
+                        lexspan[0],
+                        lexspan[1] - lexspan[0] + 1)
+            raise SymbolTableError()
+
+        return query_result
 
     def query_constant(self,
                        identifier: str,
@@ -131,7 +158,7 @@ class SymbolTable:
         return query_result, top_scope
 
     def add(self, value: SymbolValue, lexspan: tuple[int, int]) -> None:
-        name = str(value) if isinstance(value, int) else value.name
+        name = str(value.name) if isinstance(value, LabelDefinition) else value.name
         query_result, top_scope = self.query(name)
 
         if query_result is not None:

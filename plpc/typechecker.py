@@ -172,4 +172,4 @@ class TypeChecker:
         if len(array_type.dimensions) > 1:
             return ArrayType(array_type.subtype, array_type.dimensions[1:])
         else:
-            return array_type.subtype.value
+            return array_type.subtype

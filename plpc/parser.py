@@ -107,6 +107,15 @@ class _Parser:
         self.symbols.unstack_top_scope()
         p[0] = Block(p[2], p[3], p[4], p[5], p[6])
 
+        for label in p[2]:
+            if label.used and label.statement is None:
+                print_error(self.file_path,
+                            self.lexer.lexdata,
+                            f'Label \'{label.name}\' was used but not assigned to any statement',
+                            self.lexer.lineno,
+                            p.lexspan(2)[0],
+                            p.lexspan(2)[1] - p.lexspan(2)[0] + 1)
+
     def p_stack_new_scope(self, _: ply.yacc.YaccProduction) -> None:
         '''
         stack-new-scope :
@@ -145,10 +154,11 @@ class _Parser:
         '''
 
         try:
-            self.symbols.add(p[1].value,
+            label = LabelDefinition(p[1].value, None)
+            self.symbols.add(label,
                              (p.lexspan(1)[0], p.lexspan(1)[0] + len(str(p[1].value)) - 1))
 
-            p[0] = [p[1].value]
+            p[0] = [label]
         except SymbolTableError:
             self.has_errors = True
 
@@ -158,10 +168,11 @@ class _Parser:
         '''
 
         try:
-            self.symbols.add(p[3].value,
+            label = LabelDefinition(p[3].value, None)
+            self.symbols.add(label,
                              (p.lexspan(3)[0], p.lexspan(3)[0] + len(str(p[3].value)) - 1))
 
-            p[1].append(p[3].value)
+            p[1].append(label)
             p[0] = p[1]
         except SymbolTableError:
             self.has_errors = True
@@ -839,11 +850,11 @@ class _Parser:
         '''
         factor : factor-id variable-index-list
         '''
-        if isinstance(p[1], tuple) and isinstance(p[1][0], VariableUsage):
+        if isinstance(p[1], tuple) and isinstance(p[1][0], VariableUsage) and len(p[2]) > 0:
             p[1] = p[1][0].variable.name
             self.p_variable_usage(p)
             p[0] = (p[0], p[0].type)
-        else:
+        elif len(p[2]) > 0:
             print_error(self.file_path,
                         self.lexer.lexdata,
                         'Indexing object that\'s not a variable',
@@ -851,6 +862,8 @@ class _Parser:
                         p.lexspan(0)[0],
                         p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
             self.has_errors = True
+        else:
+            p[0] = p[1]
 
     def p_factor_id(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -914,12 +927,44 @@ class _Parser:
 
     def p_statement_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        statement :
+        statement : unlabeled-statement
+        '''
+        p[0] = p[1]
+
+    def p_statement_labeled(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        statement : INTEGER ':' unlabeled-statement
+        '''
+        try:
+            label = self.symbols.query_label(
+                p[1].value,
+                (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1].string_value) - 1),
+                True
+            )
+
+            if label.statement is None:
+                label.statement = p[3]
+            else:
+                print_error(self.file_path,
+                            self.lexer.lexdata,
+                            'Label already assigned to a statement',
+                            self.lexer.lineno,
+                            p.lexspan(1)[0],
+                            len(p[1].string_value))
+                self.has_errors = True
+        except SymbolTableError:
+            self.has_errors = True
+
+        p[0] = p[3]
+
+    def p_unlabeled_statement_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unlabeled-statement :
         '''
 
-    def p_statement(self, p: ply.yacc.YaccProduction) -> None:
+    def p_unlabeled_statement_assign(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        statement : variable-usage ASSIGN expression
+        unlabeled-statement : variable-usage ASSIGN expression
         '''
 
         if p[1] is not None and \
@@ -935,6 +980,184 @@ class _Parser:
             self.has_errors = True
 
         p[0] = AssignStatement(p[1], p[3])
+
+    def p_unlabeled_statement_goto(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unlabeled-statement : GOTO INTEGER
+        '''
+        try:
+            label = self.symbols.query_label(
+                p[2].value,
+                (p.lexspan(2)[0], p.lexspan(2)[0] + len(p[2].string_value) - 1),
+                True
+            )
+            label.used = True
+            p[0] = GotoStatement(label)
+        except SymbolTableError:
+            self.has_errors = True
+
+    def p_unlabeled_statement_begin_end(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unlabeled-statement : begin-end-statement
+        '''
+        p[0] = p[1]
+
+    def p_unlabeled_statement_if(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unlabeled-statement : IF expression THEN statement if-statement-else
+        '''
+
+        if p[2] is not None and p[2][1] != BuiltInType.BOOLEAN:
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        'Expression in if-statement is not boolean',
+                        self.lexer.lineno,
+                        p.lexspan(2)[0],
+                        p.lexspan(2)[1] - p.lexspan(2)[0] + 1)
+            self.has_errors = True
+
+        p[0] = IfStatement(p[2], p[4], p[5])
+
+    def p_if_statement_else_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        if-statement-else :
+        '''
+        p[0] = []
+
+    def p_if_statement_else_non_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        if-statement-else : ELSE statement
+        '''
+        p[0] = p[2]
+
+    def p_if_statement_else_error(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        if-statement-else : ';' ELSE statement
+        '''
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'Invalid syntax. Maybe you have an extra semicolon?',
+                    self.lexer.lineno,
+                    p.lexspan(1)[0],
+                    len(';'))
+        self.has_errors = True
+
+    # TODO - implement case statement
+
+    def p_unlabeled_statement_repeat(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unlabeled-statement : REPEAT statement-list UNTIL expression
+        '''
+
+        if p[4] is not None and p[4][1] != BuiltInType.BOOLEAN:
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        'Expression in repeat-until loop is not boolean',
+                        self.lexer.lineno,
+                        p.lexspan(4)[0],
+                        p.lexspan(4)[1] - p.lexspan(4)[0] + 1)
+            self.has_errors = True
+
+        p[0] = RepeatStatement(p[4], p[2])
+
+    def p_unlabeled_statement_while(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unlabeled-statement : WHILE expression DO statement
+        '''
+
+        if p[2] is not None and p[2][1] != BuiltInType.BOOLEAN:
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        'Expression in while loop is not boolean',
+                        self.lexer.lineno,
+                        p.lexspan(2)[0],
+                        p.lexspan(2)[1] - p.lexspan(2)[0] + 1)
+            self.has_errors = True
+
+        p[0] = WhileStatement(p[2], p[4])
+
+    def p_unlabeled_statement_for(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unlabeled-statement : FOR ID ASSIGN expression TO     expression DO statement
+                            | FOR ID ASSIGN expression DOWNTO expression DO statement
+        '''
+
+        try:
+            definition, top_scope = self.symbols.query_variable(
+                p[2],
+                (p.lexspan(2)[0], p.lexspan(2)[0] + len(p[2]) - 1),
+                True
+            )
+            assert definition is not None
+
+            if not top_scope:
+                print_error(self.file_path,
+                            self.lexer.lexdata,
+                            'For-loop control variable is not in the top-most scope',
+                            self.lexer.lineno,
+                            p.lexspan(2)[0],
+                            p.lexspan(2)[1] - p.lexspan(2)[0] + 1)
+                self.has_errors = True
+
+            if definition.variable_type not in \
+                [BuiltInType.BOOLEAN, BuiltInType.INTEGER, BuiltInType.CHAR] and \
+                not isinstance(definition.variable_type, list):
+
+                print_error(self.file_path,
+                            self.lexer.lexdata,
+                            'For loop control variable is not ordinal',
+                            self.lexer.lineno,
+                            p.lexspan(2)[0],
+                            p.lexspan(2)[1] - p.lexspan(2)[0] + 1)
+                self.has_errors = True
+
+            if p[4] is not None and \
+                not self.type_checker.can_assign(definition.variable_type, p[4][1]):
+
+                print_error(self.file_path,
+                            self.lexer.lexdata,
+                            'Type mismatch between expression and loop control variable',
+                            self.lexer.lineno,
+                            p.lexspan(4)[0],
+                            p.lexspan(4)[1] - p.lexspan(4)[0] + 1)
+                self.has_errors = True
+
+            if p[6] is not None and \
+                not self.type_checker.can_assign(definition.variable_type, p[6][1]):
+
+                print_error(self.file_path,
+                            self.lexer.lexdata,
+                            'Type mismatch between expression and loop control variable',
+                            self.lexer.lineno,
+                            p.lexspan(6)[0],
+                            p.lexspan(6)[1] - p.lexspan(6)[0] + 1)
+                self.has_errors = True
+
+            p[0] = ForStatement(definition, p[4], p[6], p[5].lower(), p[8])
+        except SymbolTableError:
+            self.has_errors = True
+
+    def p_unlabeled_statement_with(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unlabeled-statement : WITH variable-list DO statement
+        '''
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'WITH statements are not supported',
+                    self.lexer.lineno,
+                    p.lexspan(1)[0],
+                    len('WITH'))
+        self.has_errors = True
+
+    def p_variable_list_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-list : variable-usage
+        '''
+
+    def p_variable_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        variable-list : variable-list ',' variable-usage
+        '''
 
     def p_error(self, t: ply.lex.LexToken) -> None:
         if t is None:

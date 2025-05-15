@@ -28,11 +28,17 @@ class Program:
 
 @dataclass
 class Block:
-    labels: list[int]
+    labels: list[LabelDefinition]
     constants: list[ConstantDefinition]
     types: list[TypeDefinition]
     variables: list[VariableDefinition]
     body: BeginEndStatement
+
+@dataclass
+class LabelDefinition:
+    name: int
+    statement: None | Statement
+    used: bool = False
 
 @dataclass
 class ConstantDefinition:
@@ -67,7 +73,7 @@ class RangeType:
 
 @dataclass
 class ArrayType:
-    subtype: TypeDefinition
+    subtype: TypeValue
     dimensions: list[RangeType]
 
 ConstantValue = bool | int | float | str | EnumeratedTypeConstantValue
@@ -104,6 +110,38 @@ class AssignStatement:
     left: VariableUsage
     right: Expression
 
-Statement = AssignStatement
+@dataclass
+class GotoStatement:
+    label: LabelDefinition
 
-BeginEndStatement = list[Statement]
+@dataclass
+class IfStatement:
+    condition: Expression
+    when_true: Statement
+    when_false: Statement
+
+@dataclass
+class CaseStatement:
+    expression: Expression
+    # cases: list[tuple[list[ConstantValue]], ]
+
+@dataclass
+class RepeatStatement:
+    expression: Expression
+    body: list[Statement]
+
+@dataclass
+class WhileStatement:
+    expression: Expression
+    body: Statement
+
+@dataclass
+class ForStatement:
+    variable: VariableDefinition
+    initial_expression: Expression
+    final_expression: Expression
+    direction: Literal['to', 'downto']
+    body: Statement
+
+BeginEndStatement = list['Statement']
+Statement = AssignStatement | GotoStatement | BeginEndStatement | IfStatement
