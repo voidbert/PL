@@ -18,37 +18,41 @@
 
 import ply.lex
 
-from .ast import \
-    BuiltInType, ConstantDefinition, LabelDefinition, TypeDefinition, VariableDefinition
+# pylint: disable-next=wildcard-import,unused-wildcard-import
+from .ast import *
 from .error import print_error
 
 class SymbolTableError(ValueError):
     pass
 
-SymbolValue = LabelDefinition | ConstantDefinition | TypeDefinition | VariableDefinition
+SymbolValue = \
+    LabelDefinition | CallableDefinition | ConstantDefinition | TypeDefinition | VariableDefinition
 
 class SymbolTable:
     def __init__(self, file_path: str, lexer: ply.lex.Lexer) -> None:
         self.file_path = file_path
         self.lexer = lexer
 
-        self.scopes: list[dict[str, SymbolValue]] = []
+        empty_body = Block([], [], [], [], [], [])
 
-    def stack_new_scope(self) -> None:
-        if self.scopes:
-            self.scopes.append({})
-        else:
+        self.scopes: list[dict[str, SymbolValue]] = [
             # 6.2.2.10 - Required identifiers are in the scope of the program
             # 6.4.2 - Required simple types
-            self.scopes.append({
+            {
                 'integer': TypeDefinition('integer', BuiltInType.INTEGER),
                 'real': TypeDefinition('real', BuiltInType.REAL),
                 'boolean': TypeDefinition('boolean', BuiltInType.BOOLEAN),
                 'char': TypeDefinition('char', BuiltInType.CHAR),
                 'true': ConstantDefinition('true', True),
                 'false': ConstantDefinition('false', False),
-                'maxint': ConstantDefinition('maxint', 1 << 16 - 1)
-            })
+                'maxint': ConstantDefinition('maxint', 1 << 16 - 1),
+                'writeln': CallableDefinition('writeln', None, BuiltInType.VOID, empty_body),
+                'readln': CallableDefinition('readln', None, BuiltInType.VOID, empty_body)
+            }
+        ]
+
+    def new_scope(self) -> None:
+        self.scopes.append({})
 
     def unstack_top_scope(self) -> None:
         self.scopes.pop()
@@ -157,6 +161,24 @@ class SymbolTable:
 
         return query_result, top_scope
 
+    def query_callable(self,
+                       identifier: str,
+                       lexspan: tuple[int, int] = (0, 0),
+                       error: bool = False) -> tuple[None | CallableDefinition, bool]:
+
+        query_result, top_scope = self.query(identifier, lexspan, error, 'Callable')
+
+        if not isinstance(query_result, CallableDefinition):
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        f'Object with name \'{identifier}\' is not a callable',
+                        self.lexer.lineno,
+                        lexspan[0],
+                        lexspan[1] - lexspan[0] + 1)
+            raise SymbolTableError()
+
+        return query_result, top_scope
+
     def add(self, value: SymbolValue, lexspan: tuple[int, int]) -> None:
         name = str(value.name) if isinstance(value, LabelDefinition) else value.name
         query_result, top_scope = self.query(name)
@@ -172,7 +194,6 @@ class SymbolTable:
 
                 raise SymbolTableError()
             else:
-                # TODO - test this when procedures and functions are implemented
                 print_error(self.file_path,
                             self.lexer.lexdata,
                             f'Shadowing object with name \'{name}\'',

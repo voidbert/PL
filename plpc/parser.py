@@ -97,15 +97,14 @@ class _Parser:
 
     def p_block(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        block : stack-new-scope \
-                label-block \
+        block : label-block \
                 constant-block \
                 type-block \
                 variable-block \
+                callable-block \
                 begin-end-statement \
         '''
-        self.symbols.unstack_top_scope()
-        p[0] = Block(p[2], p[3], p[4], p[5], p[6])
+        p[0] = Block(p[1], p[2], p[3], p[4], p[5], p[6])
 
         for label in p[2]:
             if label.used and label.statement is None:
@@ -115,12 +114,6 @@ class _Parser:
                             self.lexer.lineno,
                             p.lexspan(2)[0],
                             p.lexspan(2)[1] - p.lexspan(2)[0] + 1)
-
-    def p_stack_new_scope(self, _: ply.yacc.YaccProduction) -> None:
-        '''
-        stack-new-scope :
-        '''
-        self.symbols.stack_new_scope()
 
     def p_label_block_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -677,22 +670,212 @@ class _Parser:
 
     def p_variable_index(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        variable-index : '[' index-expression-list ']'
+        variable-index : '[' expression-list ']'
         '''
         p[0] = p[2]
 
-    def p_index_expression_list_single(self, p: ply.yacc.YaccProduction) -> None:
+    # 6.6. Procedure and function delarations
+
+    def p_callable_block_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        index-expression-list : expression
+        callable-block :
+        '''
+        p[0] = []
+
+    def p_callable_block_non_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        callable-block : callable-list
+        '''
+
+        if len(self.symbols.scopes) > 1:
+            first_token_length = \
+                len('PROCEDURE') if p[1][0].return_type == BuiltInType.VOID else len('FUNCTION')
+
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        'Nested procedures / functions are not supported',
+                        self.lexer.lineno,
+                        p.lexspan(0)[0],
+                        first_token_length)
+            self.has_errors = True
+
+        p[0] = p[1]
+
+    def p_callable_list_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        callable-list : callable-definition
         '''
         p[0] = [p[1]]
 
-    def p_index_expression_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+    def p_callable_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        index-expression-list : index-expression-list ',' expression
+        callable-list : callable-block ';' callable-definition
         '''
         p[1].append(p[3])
         p[0] = p[1]
+
+    def p_callable_definition_procedure(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        callable-definition : procedure-heading ';' block
+        '''
+
+        call = CallableDefinition(
+            p[1][0],
+            p[1][1],
+            BuiltInType.VOID,
+            p[3]
+        )
+        self.symbols.unstack_top_scope()
+
+        try:
+            self.symbols.add(call, (p[1][2], p[1][2] + len(p[1][0]) - 1))
+            p[0] = call
+        except SymbolTableError:
+            self.has_errors = True
+
+    def p_callable_definition_function(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        callable-definition : function-heading ';' block
+        '''
+
+        call = CallableDefinition(
+            p[1][0],
+            p[1][1],
+            p[1][2],
+            p[3]
+        )
+        self.symbols.unstack_top_scope()
+
+        try:
+            self.symbols.add(call, (p[1][3], p[1][3] + len(p[1][0]) - 1))
+            p[0] = call
+        except SymbolTableError:
+            self.has_errors = True
+
+    def p_new_scope_procedure(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        procedure-heading : PROCEDURE ID new-scope parameter-list
+        '''
+        p[0] = (p[2], p[4], p.lexspan(2)[0])
+
+    def p_function_heading(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        function-heading : FUNCTION ID new-scope parameter-list ':' type-id
+        '''
+        self.symbols.add(VariableDefinition(p[2], p[6]), p.lexspan(2))
+        p[0] = (p[2], p[4], p[6], p.lexspan(2)[0])
+
+    def p_new_scope(self, _: ply.yacc.YaccProduction) -> None:
+        '''
+        new-scope :
+        '''
+        self.symbols.new_scope()
+
+    def p_parameter_list_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        parameter-list :
+        '''
+        p[0] = []
+
+    def p_parameter_list_non_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        parameter-list : '(' parameter-list-non-empty ')'
+        '''
+        p[0] = p[2]
+
+    def p_parameter_list_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        parameter-list-non-empty : parameter
+        '''
+        p[0] = p[1]
+
+    def p_parameter_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        parameter-list-non-empty : parameter-list-non-empty ';' parameter
+        '''
+        p[1].extend(p[3])
+        p[0] = p[1]
+
+    def p_parameter(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        parameter : identifier-list ':' type-id
+        '''
+
+        ret: list[VariableDefinition] = []
+        for identifier, start in p[1]:
+            try:
+                variable = VariableDefinition(identifier, p[3])
+                self.symbols.add(variable, (start, start + len(identifier) - 1))
+                ret.append(variable)
+            except SymbolTableError:
+                self.has_errors = True
+
+        p[0] = ret
+
+    def p_callable_call(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        callable-call : ID callable-arguments
+        '''
+        try:
+            definition, _ = self.symbols.query_callable(
+                p[1],
+                (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1]) - 1),
+                True
+            )
+            assert definition is not None
+
+            if definition.parameters is not None:
+                if len(definition.parameters) != len(p[2]):
+                    print_error(self.file_path,
+                                self.lexer.lexdata,
+                                'Wrong number of arguments',
+                                self.lexer.lineno,
+                                p.lexspan(2)[0],
+                                p.lexspan(2)[0] - p.lexspan(2)[1] + 1)
+                    self.has_errors = True
+                    return
+
+                for i, (left, right) in enumerate(zip(definition.parameters, p[2])):
+                    if right and not self.type_checker.can_assign(left.variable_type, right[1]):
+                        ordinal = {
+                            '1': 'st',
+                            '2': 'nd'
+                        }.get(str(i + 1)[-1], 'th')
+
+                        print_error(self.file_path,
+                                    self.lexer.lexdata,
+                                    f'Type mismatch in {i + 1}{ordinal} argument',
+                                    self.lexer.lineno,
+                                    p.lexspan(1)[0],
+                                    len(p[1]))
+                        self.has_errors = True
+
+            p[0] = CallableCall(definition, p[2])
+        except SymbolTableError:
+            self.has_errors = True
+
+    def p_callable_arguments_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        callable-arguments :
+        '''
+        p[0] = []
+
+    def p_callable_arguments_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        callable-arguments : '(' expression-list ')'
+        '''
+        p[0] = p[2]
+
+    def p_callable_arguments_error(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        callable-arguments : '(' ')'
+        '''
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'To pass no arguments, remove the parentheses',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    p.lexspan(1)[1])
 
     # 6.7 - Expressions
 
@@ -823,6 +1006,18 @@ class _Parser:
         '''
         p[0] = p[2]
 
+    def p_factor_nil(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        factor : NIL
+        '''
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    'Pointer types are not supported',
+                    self.lexer.lineno,
+                    p.lexspan(0)[0],
+                    len('NIL'))
+        self.has_errors = True
+
     def p_factor_not(self, p: ply.yacc.YaccProduction) -> None:
         '''
         factor : NOT factor
@@ -840,30 +1035,42 @@ class _Parser:
         '''
         p[0] = (p[1], self.type_checker.get_constant_type(p[1]))
 
-    def p_factor_as_id_simple(self, p: ply.yacc.YaccProduction) -> None:
-        '''
-        factor : factor-id
-        '''
-        p[0] = p[1]
-
     def p_factor_as_id_indexed(self, p: ply.yacc.YaccProduction) -> None:
         '''
         factor : factor-id variable-index-list
+               | factor-id callable-arguments empty
         '''
-        if isinstance(p[1], tuple) and isinstance(p[1][0], VariableUsage) and len(p[2]) > 0:
-            p[1] = p[1][0].variable.name
-            self.p_variable_usage(p)
-            p[0] = (p[0], p[0].type)
-        elif len(p[2]) > 0:
+
+        if not isinstance(p[1], tuple):
+            return
+
+        if isinstance(p[1][0], VariableUsage) and len(p) == 3:
+            if len(p[2]) > 0:
+                p[1] = p[1][0].variable.name
+                self.p_variable_usage(p)
+                p[0] = (p[0], p[0].type)
+            else:
+                p[0] = p[1]
+        elif isinstance(p[1][0], CallableCall):
+            p[1] = p[1][0].callable.name
+            self.p_callable_call(p)
+
+            if p[0] is not None:
+                p[0] = (p[0], p[0].callable.return_type)
+        else:
             print_error(self.file_path,
                         self.lexer.lexdata,
-                        'Indexing object that\'s not a variable',
+                        'Indexing / calling object that\'s not a variable / function',
                         self.lexer.lineno,
                         p.lexspan(0)[0],
                         p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
             self.has_errors = True
-        else:
-            p[0] = p[1]
+
+    def p_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        empty :
+        '''
+        # A simple trick not to rework the whole grammar
 
     def p_factor_id(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -881,9 +1088,34 @@ class _Parser:
                 p[0] = (obj, self.type_checker.get_constant_type(obj.value))
             elif isinstance(obj, VariableDefinition):
                 p[0] = (VariableUsage(obj, obj.variable_type, []), obj.variable_type)
+            elif isinstance(obj, CallableDefinition):
+                if obj.return_type == BuiltInType.VOID:
+                    print_error(self.file_path,
+                                self.lexer.lexdata,
+                                'This is a procedure and not a function',
+                                self.lexer.lineno,
+                                p.lexspan(0)[0],
+                                p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+                    self.has_errors = True
+                    return
+
+                p[0] = (CallableCall(obj, []), obj.return_type)
 
         except SymbolTableError:
             self.has_errors = True
+
+    def p_expression_list_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        expression-list : expression
+        '''
+        p[0] = [p[1]]
+
+    def p_expression_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        expression-list : expression-list ',' expression
+        '''
+        p[1].append(p[3])
+        p[0] = p[1]
 
     # 6.8 - Statements
 
@@ -920,7 +1152,6 @@ class _Parser:
         '''
         statement-list : statement-list ';' statement
         '''
-
         if p[3] is not None:
             p[1].append(p[3])
         p[0] = p[1]
@@ -995,6 +1226,21 @@ class _Parser:
             p[0] = GotoStatement(label)
         except SymbolTableError:
             self.has_errors = True
+
+    def p_unlabeled_statement_call(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unlabeled-statement : callable-call
+        '''
+        if p[1] is not None and p[1].callable.return_type != BuiltInType.VOID:
+            print_error(self.file_path,
+                        self.lexer.lexdata,
+                        'Calling a function, and not a procedure',
+                        self.lexer.lineno,
+                        p.lexspan(0)[0],
+                        len(p[1].callable.name))
+            self.has_errors = True
+        else:
+            p[0] = p[1]
 
     def p_unlabeled_statement_begin_end(self, p: ply.yacc.YaccProduction) -> None:
         '''

@@ -32,6 +32,7 @@ class Block:
     constants: list[ConstantDefinition]
     types: list[TypeDefinition]
     variables: list[VariableDefinition]
+    callables: list[CallableDefinition]
     body: BeginEndStatement
 
 @dataclass
@@ -56,6 +57,7 @@ class BuiltInType(IntEnum):
     REAL = 2
     CHAR = 3
     STRING = 4
+    VOID = 5
 
 EnumeratedType = list[ConstantDefinition]
 
@@ -91,6 +93,18 @@ class VariableUsage:
     indices: list[Expression]
 
 @dataclass
+class CallableDefinition:
+    name: str
+    parameters: None | list[VariableDefinition]
+    return_type: TypeValue
+    body: Block
+
+@dataclass
+class CallableCall:
+    callable: CallableDefinition
+    arguments: list[Expression]
+
+@dataclass
 class BinaryOperation:
     operator: Literal['+', '-', '*', '/', 'div', 'mod',
                       'and', 'or', 'in',
@@ -103,7 +117,10 @@ class UnaryOperation:
     operator: Literal['+', '-', 'not']
     sub: Expression
 
-Expression = tuple[ConstantDefinition | VariableUsage | BinaryOperation | UnaryOperation, TypeValue]
+Expression = tuple[
+    ConstantDefinition | VariableUsage | BinaryOperation | UnaryOperation | CallableCall,
+    TypeValue
+]
 
 @dataclass
 class AssignStatement:
@@ -144,4 +161,4 @@ class ForStatement:
     body: Statement
 
 BeginEndStatement = list['Statement']
-Statement = AssignStatement | GotoStatement | BeginEndStatement | IfStatement
+Statement = AssignStatement | GotoStatement | BeginEndStatement | IfStatement | Expression
