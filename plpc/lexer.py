@@ -85,9 +85,6 @@ class _Lexer:
 
             # 6.1.7 - Character-strings
             'STRING',
-
-            # 6.1.8 - Token separators
-            'COMMENT'
          ]
 
         self.t_DIFFERENT = r'<>'
@@ -97,6 +94,7 @@ class _Lexer:
         self.t_RANGE = r'\.\.'
 
         self.t_ignore = ' \t\r'
+        # 6.1.8 - Token separators
         self.t_ignore_COMMENT = r'({|\(\*)((?!{|\(\*)(.|\n))*?(}|\*\))'
 
         self.lexer = ply.lex.lex(module=self, reflags=re.IGNORECASE)
