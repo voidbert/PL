@@ -16,7 +16,6 @@
 #
 # -------------------------------------------------------------------------------------------------
 
-import dataclasses
 import re
 import ply.lex
 
@@ -24,21 +23,6 @@ from .error import print_error
 
 class LexerError(ValueError):
     pass
-
-@dataclasses.dataclass
-class IntegerTokenValue:
-    value: int
-    string_value: str
-
-@dataclasses.dataclass
-class FloatTokenValue:
-    value: float
-    string_value: str
-
-@dataclasses.dataclass
-class StringTokenValue:
-    value: str
-    string_value: str
 
 class _Lexer:
     def __init__(self, file_path: str):
@@ -244,21 +228,18 @@ class _Lexer:
         return t
 
     def t_FLOAT(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
-        r'[0-9]+(\.[0-9]+e(\+|\-)?[0-9]+|\.[0-9]+|e(\+|\-)?[0-9]+)'
-        converted = float(t.value)
-        t.value = FloatTokenValue(converted, t.value)
+        r'[0-9]+(\.[0-9]+e(\+|\-)?[0-9]+|\.[0-9]+|e(\+|\-)?[0-9]+)\b'
+        t.value = float(t.value)
         return t
 
     def t_INTEGER(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
-        r'[0-9]+'
-        converted = int(t.value)
-        t.value = IntegerTokenValue(converted, t.value)
+        r'[0-9]+\b'
+        t.value = int(t.value)
         return t
 
     def t_STRING(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
         r'\'((?:\'\'|[^\'])*)\''
-        converted = t.value[1:-1].replace('\'\'', '\'')
-        t.value = StringTokenValue(converted, t.value)
+        t.value = t.value[1:-1].replace('\'\'', '\'')
         return t
 
     # 6.1.9 - Lexical alternatives
