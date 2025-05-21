@@ -118,7 +118,7 @@ class UnaryOperation:
     sub: Expression
 
 Expression = tuple[
-    ConstantDefinition | VariableUsage | BinaryOperation | UnaryOperation | CallableCall,
+    ConstantValue | VariableUsage | BinaryOperation | UnaryOperation | CallableCall,
     TypeValue
 ]
 

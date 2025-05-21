@@ -123,8 +123,8 @@ class TypeChecker:
             return BuiltInType.BOOLEAN
 
         elif operation.operator in ['=', '<>', '<', '>', '<=', '=>'] and \
-            left_type in [BuiltInType.BOOLEAN, BuiltInType.INTEGER, BuiltInType.REAL] and \
-            right_type in [BuiltInType.BOOLEAN, BuiltInType.INTEGER, BuiltInType.REAL]:
+            isinstance(left_type, BuiltInType) and \
+            left_type == right_type:
 
             return BuiltInType.BOOLEAN
 
@@ -143,6 +143,8 @@ class TypeChecker:
             return True
         elif left_type == BuiltInType.REAL and right_type == BuiltInType.INTEGER:
             return True
+        elif left_type == BuiltInType.STRING and right_type == BuiltInType.CHAR:
+            return True
 
         return False
 
@@ -150,6 +152,9 @@ class TypeChecker:
                               array_type: TypeValue,
                               index_type: TypeValue,
                               lexspan: tuple[int, int]) -> TypeValue:
+
+        if array_type == BuiltInType.STRING:
+            array_type = ArrayType(BuiltInType.CHAR, [RangeType(1, 2048, BuiltInType.INTEGER)])
 
         if not isinstance(array_type, ArrayType):
             print_error(self.file_path,

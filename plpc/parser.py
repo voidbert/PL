@@ -46,6 +46,23 @@ class _Parser:
         self.symbols = SymbolTable(file_path, self.lexer)
         self.type_checker = TypeChecker(file_path, self.lexer)
 
+    def print_error(self,
+                    error_message: str,
+                    start: int,
+                    length: int,
+                    warning: bool = False) -> None:
+
+        print_error(self.file_path,
+                    self.lexer.lexdata,
+                    error_message,
+                    self.lexer.lineno,
+                    start,
+                    length,
+                    warning)
+
+        if not warning:
+            self.has_errors = True
+
     # 6.2 - Blocks, scopes and activations
 
     def p_program(self, p: ply.yacc.YaccProduction) -> None:
@@ -53,6 +70,12 @@ class _Parser:
         program : PROGRAM ID program-arguments ';' block '.'
         '''
         p[0] = Program(p[2], p[5])
+
+    # Continue parsing even if program arguments are invalid
+    def p_program_error(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        program : PROGRAM ID error ';' block '.'
+        '''
 
     def p_program_arguments_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -63,24 +86,18 @@ class _Parser:
         '''
         program-arguments : '(' ')'
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'Invalid program arguments: at least one argument required',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+        self.print_error('Invalid program arguments: at least one argument required',
+                         p.lexspan(0)[0],
+                         p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
 
     def p_program_arguments_non_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
         program-arguments : '(' identifier-list ')'
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'Program arguments are not supported. Ignoring them...',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1,
-                    True)
+        self.print_error('Program arguments are not supported. Ignoring them...',
+                         p.lexspan(0)[0],
+                         p.lexspan(0)[1] - p.lexspan(0)[0] + 1,
+                         True)
 
     def p_identitifier_list_single(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -97,106 +114,155 @@ class _Parser:
 
     def p_block(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        block : label-block \
-                constant-block \
-                type-block \
-                variable-block \
-                callable-block \
-                begin-end-statement \
+        block : any-block-list begin-end-statement
         '''
-        p[0] = Block(p[1], p[2], p[3], p[4], p[5], p[6])
 
-        for label in p[2]:
-            if label.used and label.statement is None:
-                print_error(self.file_path,
-                            self.lexer.lexdata,
-                            f'Label \'{label.name}\' was used but not assigned to any statement',
-                            self.lexer.lineno,
-                            p.lexspan(2)[0],
-                            p.lexspan(2)[1] - p.lexspan(2)[0] + 1)
+        blocks: dict[str, int | None] = {
+            'LABEL': None,
+            'CONST': None,
+            'TYPE': None,
+            'VAR': None,
+            'CALL': None
+        }
 
-    def p_label_block_empty(self, p: ply.yacc.YaccProduction) -> None:
+        for i, ((block_type, _), start) in enumerate(p[1]):
+            for before in list(blocks):
+                if before == block_type:
+                    break
+                elif blocks[before] is None:
+                    blocks[before] = -1
+
+            if blocks[block_type] is None:
+                blocks[block_type] = i
+            elif blocks[block_type] == -1:
+                self.print_error(
+                    'Blocks in the wrong order. Correct order is '
+                    'LABEL, CONST, TYPE, VAR, PROCEDURE / FUNCTION',
+                    start,
+                    len(block_type)
+                )
+            else:
+                self.print_error(f'{block_type} block defined twice',
+                                 start,
+                                 len(block_type))
+
+        def get_block(name: str) -> list:
+            index = blocks[name]
+            if index is None or index == -1:
+                return []
+            else:
+                return p[1][index][0][1]
+
+        p[0] = Block(
+            get_block('LABEL'),
+            get_block('CONST'),
+            get_block('TYPE'),
+            get_block('VAR'),
+            get_block('CALL'),
+            p[2]
+        )
+
+        if get_block('LABEL') is not None:
+            for label in get_block('LABEL'):
+                if label.used and label.statement is None:
+                    self.print_error(
+                        f'Label \'{label.name}\' was used but not assigned to any statement',
+                        p.lexspan(1)[0],
+                        len('LABEL')
+                    )
+
+    def p_any_block_list_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        label-block :
+        any-block-list :
         '''
         p[0] = []
+
+    def p_any_block_list_non_empty(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        any-block-list : any-block-list-non-empty
+        '''
+        p[0] = p[1]
+
+    def p_any_block_list_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        any-block-list-non-empty : any-block
+        '''
+        p[0] = [(p[1], p.lexspan(1)[0])]
+
+    def p_any_block_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        any-block-list-non-empty : any-block-list any-block
+        '''
+        p[1].append((p[2], p.lexspan(2)[0]))
+        p[0] = p[1]
+
+    def p_any_block(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        any-block : label-block
+                  | constant-block
+                  | type-block
+                  | variable-block
+                  | callable-block
+        '''
+        p[0] = p[1]
+
+    def p_label_block(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        label-block : LABEL label-list ';'
+        '''
+        p[0] = ('LABEL', p[2])
 
     def p_label_block_error(self, p: ply.yacc.YaccProduction) -> None:
         '''
         label-block : LABEL
+                    | LABEL ';'
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'At least one constant definition is required in a label block',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    len('LABEL'))
 
-        self.has_errors = True
-        p[0] = []
-
-    def p_label_block_non_empty(self, p: ply.yacc.YaccProduction) -> None:
-        '''
-        label-block : LABEL label-list ';'
-        '''
-        p[0] = p[2]
+        self.print_error('At least one label definition is required in a label block',
+                         p.lexspan(0)[0],
+                         len('LABEL'))
+        p[0] = ('LABEL', [])
 
     def p_label_list_single(self, p: ply.yacc.YaccProduction) -> None:
         '''
         label-list : INTEGER
         '''
-
-        try:
-            label = LabelDefinition(p[1].value, None)
-            self.symbols.add(label,
-                             (p.lexspan(1)[0], p.lexspan(1)[0] + len(str(p[1].value)) - 1))
-
-            p[0] = [label]
-        except SymbolTableError:
-            self.has_errors = True
+        p[0] = [self.__add_label(p, 1)]
 
     def p_label_definition_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
         '''
         label-list : label-list ',' INTEGER
         '''
+        p[1].append(self.__add_label(p, 3))
+        p[0] = p[1]
 
+    def __add_label(self, p: ply.yacc.YaccProduction, i: int) -> LabelDefinition:
         try:
-            label = LabelDefinition(p[3].value, None)
-            self.symbols.add(label,
-                             (p.lexspan(3)[0], p.lexspan(3)[0] + len(str(p[3].value)) - 1))
-
-            p[1].append(label)
-            p[0] = p[1]
+            label = LabelDefinition(p[i], None)
+            self.symbols.add(label, (p.lexspan(i)[0], p.lexspan(i)[0] + len(str(p[i])) - 1))
         except SymbolTableError:
             self.has_errors = True
 
+        return label
+
     # 6.3 - Constant definitions
 
-    def p_constant_block_empty(self, p: ply.yacc.YaccProduction) -> None:
+    def p_constant_block(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        constant-block :
+        constant-block : CONST constant-definition-list
         '''
-        p[0] = []
+        p[0] = ('CONST', p[2])
 
     def p_constant_block_error(self, p: ply.yacc.YaccProduction) -> None:
         '''
         constant-block : CONST
+                       | CONST ';'
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'At least one constant definition is required in a constant block',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    len('CONST'))
 
-        self.has_errors = True
-        p[0] = []
-
-    def p_constant_block_non_empty(self, p: ply.yacc.YaccProduction) -> None:
-        '''
-        constant-block : CONST constant-definition-list
-        '''
-        p[0] = p[2]
+        self.print_error('At least one constant definition is required in a constant block',
+                         p.lexspan(0)[0],
+                         len('CONST'))
+        p[0] = ('CONST', [])
 
     def p_constant_definition_list_single(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -229,17 +295,13 @@ class _Parser:
         '''
         p[0] = p[1]
 
-    def p_constant_expression(self, p: ply.yacc.YaccProduction) -> None:
+    def p_constant_expression_error(self, p: ply.yacc.YaccProduction) -> None:
         '''
         constant : expression
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'Full expressions are not allowed in constants',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
-        self.has_errors = True
+        self.print_error('In standard Pascal, full expressions are not allowed in constants',
+                         p.lexspan(0)[0],
+                         p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
 
     def p_unsigned_constant_id(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -247,10 +309,11 @@ class _Parser:
         '''
 
         try:
-            query_result, _ = \
-                self.symbols.query_constant(p[1],
-                                            (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1]) - 1),
-                                            True)
+            query_result, _ = self.symbols.query_constant(
+                p[1],
+                (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1]) - 1),
+                True
+            )
 
             assert query_result is not None
             p[0] = query_result.value
@@ -269,7 +332,7 @@ class _Parser:
                                   | INTEGER
                                   | STRING
         '''
-        p[0] = p[1].value
+        p[0] = p[1]
 
     def p_signed_constant_sign(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -291,31 +354,22 @@ class _Parser:
 
     # 6.4 - Type definitions
 
-    def p_type_block_empty(self, p: ply.yacc.YaccProduction) -> None:
+    def p_type_block(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        type-block :
+        type-block : TYPE type-definition-list
         '''
-        p[0] = []
+        p[0] = ('TYPE', p[2])
 
     def p_type_block_error(self, p: ply.yacc.YaccProduction) -> None:
         '''
         type-block : TYPE
+                   | TYPE ';'
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'At least one type definition is required in a type block',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    len('TYPE'))
 
-        self.has_errors = True
-        p[0] = []
-
-    def p_type_block_non_empty(self, p: ply.yacc.YaccProduction) -> None:
-        '''
-        type-block : TYPE type-definition-list
-        '''
-        p[0] = p[2]
+        self.print_error('At least one type definition is required in a type block',
+                         p.lexspan(0)[0],
+                         len('TYPE'))
+        p[0] = ('TYPE', [])
 
     def p_type_definition_list_single(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -362,14 +416,14 @@ class _Parser:
         type : range-type
         '''
 
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'Range type being interpreted as the type of its components',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1,
-                    True)
-        p[0] = p[1].subtype
+        if p[1] is not None:
+            self.print_error(
+                'Range type being interpreted as the type of its components',
+                p.lexspan(0)[0],
+                self.lexer.lexpos - p.lexspan(0)[0],
+                True
+            )
+            p[0] = p[1].subtype
 
     def p_type_id(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -377,10 +431,11 @@ class _Parser:
         '''
 
         try:
-            query_result, _ = \
-                self.symbols.query_type(p[1],
-                                        (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1]) - 1),
-                                        True)
+            query_result, _ = self.symbols.query_type(
+                p[1],
+                (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1]) - 1),
+                True
+            )
 
             assert query_result is not None
             p[0] = query_result.value
@@ -391,13 +446,7 @@ class _Parser:
         '''
         pointer-type : '^' type-id
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'Pointer types are not supported',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    len('^'))
-        self.has_errors = True
+        self.print_error('Pointer types are not supported', p.lexspan(0)[0], len('^'))
 
     def p_enumerated_type(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -422,22 +471,16 @@ class _Parser:
         range-type : constant RANGE constant
         '''
 
-        # NOTE: error spans are somewhat off, but it seems to be a yacc bug
-
         try:
             type1 = self.type_checker.get_constant_type(p[1])
             type2 = self.type_checker.get_constant_type(p[3])
-        except TypeCheckerError:
-            self.has_errors = True
-            return
 
-        if type1 != type2:
-            print_error(self.file_path,
-                        self.lexer.lexdata,
-                        'Types of elements in range type are different',
-                        self.lexer.lineno,
-                        p.lexspan(0)[0],
-                        p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+            if type1 != type2:
+                self.print_error('Types of elements in range type are different',
+                                 p.lexspan(0)[0],
+                                 p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+                return
+        except TypeCheckerError:
             self.has_errors = True
             return
 
@@ -445,23 +488,15 @@ class _Parser:
             value1 = self.type_checker.get_constant_ordinal_value(p[1])
             value2 = self.type_checker.get_constant_ordinal_value(p[3])
         except TypeCheckerError:
-            print_error(self.file_path,
-                        self.lexer.lexdata,
-                        'Type of elements in range type is not ordinal',
-                        self.lexer.lineno,
-                        p.lexspan(0)[0],
-                        p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
-            self.has_errors = True
+            self.print_error('Type of elements in range type is not ordinal',
+                             p.lexspan(0)[0],
+                             p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
             return
 
         if value1 > value2:
-            print_error(self.file_path,
-                        self.lexer.lexdata,
-                        'Range\'s upper bound is lower than its lower bound',
-                        self.lexer.lineno,
-                        p.lexspan(0)[0],
-                        p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
-            self.has_errors = True
+            self.print_error('Range\'s upper bound is lower than its lower bound',
+                             p.lexspan(0)[0],
+                             p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
             return
 
         p[0] = RangeType(p[1], p[3], self.type_checker.get_constant_type(p[1]))
@@ -477,14 +512,10 @@ class _Parser:
         structured-type : PACKED unpacked-structured-type
         '''
 
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'Packed structured types are not supported. Ignoring this keyword ...',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    len('PACKED'),
-                    True)
-
+        self.print_error('Packed structured types are not supported. Ignoring this keyword ...',
+                         p.lexspan(0)[0],
+                         len('PACKED'),
+                         True)
         p[0] = p[2]
 
     def p_unpacked_structured_type(self, p: ply.yacc.YaccProduction) -> None:
@@ -506,6 +537,12 @@ class _Parser:
         else:
             p[0] = ArrayType(p[6], p[3])
 
+    def p_array_incomplete(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        array-type : ARRAY OF type
+        '''
+        self.print_error('Missing array dimensions', p.lexspan(0)[0], len('ARRAY'))
+
     def p_array_dimensions_single(self, p: ply.yacc.YaccProduction) -> None:
         '''
         array-dimensions : range-type
@@ -523,80 +560,64 @@ class _Parser:
         '''
         record-type : RECORD
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'Record types are not supported',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    len('RECORD'))
-        self.has_errors = True
-        raise SyntaxError()
+        self.print_error('Record types are not supported', p.lexspan(0)[0], len('RECORD'))
+
+        count = 1
+        while True:
+            tok = self.parser.token()
+            if tok.type == 'BEGIN':
+                count += 1
+            elif tok.type == 'END':
+                count -= 1
+
+            if not tok or count == 0:
+                self.parser.errok()
+                break
 
     def p_set_type(self, p: ply.yacc.YaccProduction) -> None:
         '''
         set-type : SET OF type
         '''
-
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'Set types are not supported',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    len('SET'))
-        self.has_errors = True
+        self.print_error('Set types are not supported', p.lexspan(0)[0], len('SET'))
 
     def p_file_type(self, p: ply.yacc.YaccProduction) -> None:
         '''
         file-type : FILE OF type
         '''
-
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'File types are not supported',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    len('FILE'))
-        self.has_errors = True
+        self.print_error('File types are not supported', p.lexspan(0)[0], len('FILE'))
 
     # 6.5 - Declarations and denotations of variables
 
-    def p_variable_block_empty(self, p: ply.yacc.YaccProduction) -> None:
+    def p_variable_block(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        variable-block :
+        variable-block : VAR variable-definition-list
         '''
-        p[0] = []
+        p[0] = ('VAR', p[2])
 
     def p_variable_block_error(self, p: ply.yacc.YaccProduction) -> None:
         '''
         variable-block : VAR
+                       | VAR ';'
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'At least one variable definition is required in a variable block',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    len('VAR'))
 
-        self.has_errors = True
-        p[0] = []
-
-    def p_variable_block_non_empty(self, p: ply.yacc.YaccProduction) -> None:
-        '''
-        variable-block : VAR variable-definition-list
-        '''
-        p[0] = p[2]
+        self.print_error(
+            'At least one variable definition is required in a variable block',
+            p.lexspan(0)[0],
+            len('VAR')
+        )
+        p[0] = ('VAR', [])
 
     def p_variable_definition_list_single(self, p: ply.yacc.YaccProduction) -> None:
         '''
         variable-definition-list : variable-definition
         '''
-        p[0] = [p[1]]
+        p[0] = p[1]
 
     def p_variable_definition_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
         '''
         variable-definition-list : variable-definition-list variable-definition
         '''
-        p[1].append(p[2])
+        p[1].extend(p[2])
         p[0] = p[1]
 
     def p_variable_definition(self, p: ply.yacc.YaccProduction) -> None:
@@ -628,7 +649,7 @@ class _Parser:
             assert definition is not None
 
             current_type = definition.variable_type
-            for _, index_type in p[2]:
+            for _, index_type in p[2][1]:
                 try:
                     current_type = self.type_checker.type_after_indexation(
                         current_type,
@@ -639,7 +660,7 @@ class _Parser:
                     self.has_errors = True
                     break
 
-            p[0] = VariableUsage(definition, current_type, p[2])
+            p[0] = VariableUsage(definition, current_type, p[2][1])
         except SymbolTableError:
             self.has_errors = True
 
@@ -647,13 +668,13 @@ class _Parser:
         '''
         variable-index-list :
         '''
-        p[0] = []
+        p[0] = ('VAR', [])
 
     def p_variable_index_list_non_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
         variable-index-list : variable-indices
         '''
-        p[0] = p[1]
+        p[0] = ('VAR', p[1])
 
     def p_variable_indices_single(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -675,31 +696,27 @@ class _Parser:
         p[0] = p[2]
 
     # 6.6. Procedure and function delarations
+    # NOTE: recursivity is not supported
 
-    def p_callable_block_empty(self, p: ply.yacc.YaccProduction) -> None:
+    def p_callable_block(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        callable-block :
-        '''
-        p[0] = []
-
-    def p_callable_block_non_empty(self, p: ply.yacc.YaccProduction) -> None:
-        '''
-        callable-block : callable-list
+        callable-block : callable-list ';'
         '''
 
         if len(self.symbols.scopes) > 1:
-            first_token_length = \
-                len('PROCEDURE') if p[1][0].return_type == BuiltInType.VOID else len('FUNCTION')
+            if p[1] is not None and len(p[1]) > 0 and p[1][0] is not None:
+                first_token_length = \
+                    len('PROCEDURE') if p[1][0].return_type == BuiltInType.VOID else len('FUNCTION')
+            else:
+                first_token_length = len('PROCEDURE') # On failure, just guess
 
-            print_error(self.file_path,
-                        self.lexer.lexdata,
-                        'Nested procedures / functions are not supported',
-                        self.lexer.lineno,
-                        p.lexspan(0)[0],
-                        first_token_length)
-            self.has_errors = True
+            self.print_error(
+                'Nested procedures / functions are not supported',
+                p.lexspan(0)[0],
+                first_token_length
+            )
 
-        p[0] = p[1]
+        p[0] = ('CALL', p[1])
 
     def p_callable_list_single(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -709,9 +726,9 @@ class _Parser:
 
     def p_callable_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        callable-list : callable-block ';' callable-definition
+        callable-list : callable-list callable-definition
         '''
-        p[1].append(p[3])
+        p[1].append(p[2])
         p[0] = p[1]
 
     def p_callable_definition_procedure(self, p: ply.yacc.YaccProduction) -> None:
@@ -751,6 +768,11 @@ class _Parser:
             p[0] = call
         except SymbolTableError:
             self.has_errors = True
+
+    def p_callable_definition_error(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        callable-definition : error
+        '''
 
     def p_new_scope_procedure(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -825,32 +847,32 @@ class _Parser:
             assert definition is not None
 
             if definition.parameters is not None:
-                if len(definition.parameters) != len(p[2]):
-                    print_error(self.file_path,
-                                self.lexer.lexdata,
-                                'Wrong number of arguments',
-                                self.lexer.lineno,
-                                p.lexspan(2)[0],
-                                p.lexspan(2)[0] - p.lexspan(2)[1] + 1)
-                    self.has_errors = True
-                    return
+                expected_parameters = len(definition.parameters)
+                got_parameters = len(p[2][1])
 
-                for i, (left, right) in enumerate(zip(definition.parameters, p[2])):
+                if expected_parameters != got_parameters:
+                    self.print_error(
+                        'Wrong number of arguments: '
+                        f'expected {expected_parameters}, got {got_parameters}',
+                        p.lexspan(1)[0],
+                        len(p[1])
+                    )
+
+                for i, (left, right) in enumerate(zip(definition.parameters, p[2][1])):
                     if right and not self.type_checker.can_assign(left.variable_type, right[1]):
                         ordinal = {
                             '1': 'st',
-                            '2': 'nd'
+                            '2': 'nd',
+                            '3': 'rd'
                         }.get(str(i + 1)[-1], 'th')
 
-                        print_error(self.file_path,
-                                    self.lexer.lexdata,
-                                    f'Type mismatch in {i + 1}{ordinal} argument',
-                                    self.lexer.lineno,
-                                    p.lexspan(1)[0],
-                                    len(p[1]))
-                        self.has_errors = True
+                        self.print_error(
+                            f'Type mismatch in {i + 1}{ordinal} argument',
+                            p.lexspan(1)[0],
+                            len(p[1])
+                        )
 
-            p[0] = CallableCall(definition, p[2])
+            p[0] = CallableCall(definition, p[2][1])
         except SymbolTableError:
             self.has_errors = True
 
@@ -858,24 +880,24 @@ class _Parser:
         '''
         callable-arguments :
         '''
-        p[0] = []
+        p[0] = ('CALL', [])
 
     def p_callable_arguments_multiple(self, p: ply.yacc.YaccProduction) -> None:
         '''
         callable-arguments : '(' expression-list ')'
         '''
-        p[0] = p[2]
+        p[0] = ('CALL', p[2])
 
     def p_callable_arguments_error(self, p: ply.yacc.YaccProduction) -> None:
         '''
         callable-arguments : '(' ')'
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'To pass no arguments, remove the parentheses',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    p.lexspan(1)[1])
+        self.print_error(
+            'To pass no arguments, remove the parentheses',
+            p.lexspan(1)[0],
+            p.lexspan(2)[1] - p.lexspan(1)[0] + 1
+        )
+        p[0] = ('CALL', [])
 
     # 6.7 - Expressions
 
@@ -960,7 +982,7 @@ class _Parser:
         '''
 
         try:
-            operation = UnaryOperation(p[1].lower(), p[2])
+            operation = UnaryOperation(p[1], p[2])
             expression_type = self.type_checker.get_unary_operation_type(operation, p.lexspan(1))
             p[0] = (operation, expression_type)
         except TypeCheckerError:
@@ -1010,18 +1032,17 @@ class _Parser:
         '''
         factor : NIL
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'Pointer types are not supported',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    len('NIL'))
-        self.has_errors = True
+        self.print_error(
+            'Pointer types are not supported',
+            p.lexspan(0)[0],
+            len('NIL')
+        )
 
     def p_factor_not(self, p: ply.yacc.YaccProduction) -> None:
         '''
         factor : NOT factor
         '''
+
         try:
             operation = UnaryOperation(p[1].lower(), p[2])
             expression_type = self.type_checker.get_unary_operation_type(operation, p.lexspan(0))
@@ -1035,71 +1056,56 @@ class _Parser:
         '''
         p[0] = (p[1], self.type_checker.get_constant_type(p[1]))
 
-    def p_factor_as_id_indexed(self, p: ply.yacc.YaccProduction) -> None:
-        '''
-        factor : factor-id variable-index-list
-               | factor-id callable-arguments empty
-        '''
-
-        if not isinstance(p[1], tuple):
-            return
-
-        if isinstance(p[1][0], VariableUsage) and len(p) == 3:
-            if len(p[2]) > 0:
-                p[1] = p[1][0].variable.name
-                self.p_variable_usage(p)
-                p[0] = (p[0], p[0].type)
-            else:
-                p[0] = p[1]
-        elif isinstance(p[1][0], CallableCall):
-            p[1] = p[1][0].callable.name
-            self.p_callable_call(p)
-
-            if p[0] is not None:
-                p[0] = (p[0], p[0].callable.return_type)
-        else:
-            print_error(self.file_path,
-                        self.lexer.lexdata,
-                        'Indexing / calling object that\'s not a variable / function',
-                        self.lexer.lineno,
-                        p.lexspan(0)[0],
-                        p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
-            self.has_errors = True
-
-    def p_empty(self, p: ply.yacc.YaccProduction) -> None:
-        '''
-        empty :
-        '''
-        # A simple trick not to rework the whole grammar
-
     def p_factor_id(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        factor-id : ID
+        factor : ID variable-index-list
+               | ID callable-arguments
         '''
+
         try:
             obj, _ = self.symbols.query(
                 p[1],
-                (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1])),
+                (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1]) - 1),
                 True
             )
             assert obj is not None
 
             if isinstance(obj, ConstantDefinition):
-                p[0] = (obj, self.type_checker.get_constant_type(obj.value))
+                if len(p[2][1]) == 0:
+                    p[0] = (obj.value, self.type_checker.get_constant_type(obj.value))
+                else:
+                    action = 'call' if p[2][0] == 'CALL' else 'index'
+                    self.print_error(
+                        f'Attempting to {action} constant',
+                        p.lexspan(0)[0],
+                        len(p[1])
+                    )
             elif isinstance(obj, VariableDefinition):
-                p[0] = (VariableUsage(obj, obj.variable_type, []), obj.variable_type)
+                if p[2][0] == 'VAR':
+                    self.p_variable_usage(p)
+                    p[0] = (p[0], p[0].type)
+                else:
+                    self.print_error(
+                        'Attempting to call variable',
+                        p.lexspan(0)[0],
+                        len(p[1])
+                    )
             elif isinstance(obj, CallableDefinition):
                 if obj.return_type == BuiltInType.VOID:
-                    print_error(self.file_path,
-                                self.lexer.lexdata,
-                                'This is a procedure and not a function',
-                                self.lexer.lineno,
-                                p.lexspan(0)[0],
-                                p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
-                    self.has_errors = True
-                    return
-
-                p[0] = (CallableCall(obj, []), obj.return_type)
+                    self.print_error(
+                        'This is a procedure and not a function',
+                        p.lexspan(0)[0],
+                        len(p[0])
+                    )
+                elif p[2][0] == 'CALL' or len(p[2][1]) == 0:
+                    self.p_callable_call(p)
+                    p[0] = (p[0], obj.return_type)
+                else:
+                    self.print_error(
+                        'Attempting to index function',
+                        p.lexspan(0)[0],
+                        len(p[1])
+                    )
 
         except SymbolTableError:
             self.has_errors = True
@@ -1129,13 +1135,11 @@ class _Parser:
         '''
         begin-end-statement : BEGIN END
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'Empty compound statements are not allowed in standard Pascal',
-                    self.lexer.lineno,
-                    p.lexspan(0)[0],
-                    p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
-        self.has_errors = True
+        self.print_error(
+            'Empty compound statements are not allowed in standard Pascal',
+            p.lexspan(1)[0],
+            len('BEGIN')
+        )
 
         p[0] = []
 
@@ -1166,27 +1170,31 @@ class _Parser:
         '''
         statement : INTEGER ':' unlabeled-statement
         '''
+
         try:
             label = self.symbols.query_label(
-                p[1].value,
-                (p.lexspan(1)[0], p.lexspan(1)[0] + len(p[1].string_value) - 1),
+                p[1],
+                (p.lexspan(1)[0], p.lexspan(1)[0] + len(str(p[1])) - 1),
                 True
             )
 
             if label.statement is None:
                 label.statement = p[3]
             else:
-                print_error(self.file_path,
-                            self.lexer.lexdata,
-                            'Label already assigned to a statement',
-                            self.lexer.lineno,
-                            p.lexspan(1)[0],
-                            len(p[1].string_value))
-                self.has_errors = True
+                self.print_error(
+                    'Label already assigned to a statement',
+                    p.lexspan(1)[0],
+                    len(str(p[1]))
+                )
         except SymbolTableError:
             self.has_errors = True
 
         p[0] = p[3]
+
+    def p_unlabeled_statement_error(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unlabeled-statement : error
+        '''
 
     def p_unlabeled_statement_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -1198,28 +1206,32 @@ class _Parser:
         unlabeled-statement : variable-usage ASSIGN expression
         '''
 
-        if p[1] is not None and \
-            p[3] is not None and \
+        if p[1] is not None and p[3] is not None and \
             not self.type_checker.can_assign(p[1].type, p[3][1]):
 
-            print_error(self.file_path,
-                        self.lexer.lexdata,
-                        'Assignment is impossible due to type mismatch',
-                        self.lexer.lineno,
-                        p.lexspan(0)[0],
-                        p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
-            self.has_errors = True
+            self.print_error(
+                'Assignment is impossible due to type mismatch',
+                p.lexspan(2)[0],
+                len(':=')
+            )
 
         p[0] = AssignStatement(p[1], p[3])
+
+    def p_unlabeled_statement_assign_error(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unlabeled-statement : variable-usage '=' expression
+        '''
+        self.print_error('Syntax error. Did you mean to use \':=\'?', p.lexspan(2)[0], len('='))
 
     def p_unlabeled_statement_goto(self, p: ply.yacc.YaccProduction) -> None:
         '''
         unlabeled-statement : GOTO INTEGER
         '''
+
         try:
             label = self.symbols.query_label(
-                p[2].value,
-                (p.lexspan(2)[0], p.lexspan(2)[0] + len(p[2].string_value) - 1),
+                p[2],
+                (p.lexspan(2)[0], p.lexspan(2)[0] + len(str(p[2])) - 1),
                 True
             )
             label.used = True
@@ -1231,14 +1243,13 @@ class _Parser:
         '''
         unlabeled-statement : callable-call
         '''
+
         if p[1] is not None and p[1].callable.return_type != BuiltInType.VOID:
-            print_error(self.file_path,
-                        self.lexer.lexdata,
-                        'Calling a function, and not a procedure',
-                        self.lexer.lineno,
-                        p.lexspan(0)[0],
-                        len(p[1].callable.name))
-            self.has_errors = True
+            self.print_error(
+                'Calling a function, not a procedure',
+                p.lexspan(0)[0],
+                len(p[1].callable.name)
+            )
         else:
             p[0] = p[1]
 
@@ -1252,14 +1263,12 @@ class _Parser:
         '''
         unlabeled-statement : IF expression THEN statement if-statement-else
         '''
-
         if p[2] is not None and p[2][1] != BuiltInType.BOOLEAN:
-            print_error(self.file_path,
-                        self.lexer.lexdata,
-                        'Expression in if-statement is not boolean',
-                        self.lexer.lineno,
-                        p.lexspan(2)[0],
-                        p.lexspan(2)[1] - p.lexspan(2)[0] + 1)
+            self.print_error(
+                'Expression in if-statement is not boolean',
+                p.lexspan(1)[0],
+                p.lexspan(1)[1] - p.lexspan(1)[0] + 1
+            )
             self.has_errors = True
 
         p[0] = IfStatement(p[2], p[4], p[5])
@@ -1276,34 +1285,17 @@ class _Parser:
         '''
         p[0] = p[2]
 
-    def p_if_statement_else_error(self, p: ply.yacc.YaccProduction) -> None:
-        '''
-        if-statement-else : ';' ELSE statement
-        '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'Invalid syntax. Maybe you have an extra semicolon?',
-                    self.lexer.lineno,
-                    p.lexspan(1)[0],
-                    len(';'))
-        self.has_errors = True
-
-    # TODO - implement case statement
-
     def p_unlabeled_statement_repeat(self, p: ply.yacc.YaccProduction) -> None:
         '''
         unlabeled-statement : REPEAT statement-list UNTIL expression
         '''
 
         if p[4] is not None and p[4][1] != BuiltInType.BOOLEAN:
-            print_error(self.file_path,
-                        self.lexer.lexdata,
-                        'Expression in repeat-until loop is not boolean',
-                        self.lexer.lineno,
-                        p.lexspan(4)[0],
-                        p.lexspan(4)[1] - p.lexspan(4)[0] + 1)
-            self.has_errors = True
-
+            self.print_error(
+                'Expression in repeat-until loop is not boolean',
+                p.lexspan(3)[0],
+                len('UNTIL')
+            )
         p[0] = RepeatStatement(p[4], p[2])
 
     def p_unlabeled_statement_while(self, p: ply.yacc.YaccProduction) -> None:
@@ -1312,13 +1304,11 @@ class _Parser:
         '''
 
         if p[2] is not None and p[2][1] != BuiltInType.BOOLEAN:
-            print_error(self.file_path,
-                        self.lexer.lexdata,
-                        'Expression in while loop is not boolean',
-                        self.lexer.lineno,
-                        p.lexspan(2)[0],
-                        p.lexspan(2)[1] - p.lexspan(2)[0] + 1)
-            self.has_errors = True
+            self.print_error(
+                'Expression in while loop is not boolean',
+                p.lexspan(1)[0],
+                len('WHILE')
+            )
 
         p[0] = WhileStatement(p[2], p[4])
 
@@ -1337,47 +1327,39 @@ class _Parser:
             assert definition is not None
 
             if not top_scope:
-                print_error(self.file_path,
-                            self.lexer.lexdata,
-                            'For-loop control variable is not in the top-most scope',
-                            self.lexer.lineno,
-                            p.lexspan(2)[0],
-                            p.lexspan(2)[1] - p.lexspan(2)[0] + 1)
-                self.has_errors = True
+                self.print_error(
+                    'For-loop control variable is not in the top-most scope',
+                    p.lexspan(2)[0],
+                    len(p[2])
+                )
 
             if definition.variable_type not in \
                 [BuiltInType.BOOLEAN, BuiltInType.INTEGER, BuiltInType.CHAR] and \
                 not isinstance(definition.variable_type, list):
 
-                print_error(self.file_path,
-                            self.lexer.lexdata,
-                            'For loop control variable is not ordinal',
-                            self.lexer.lineno,
-                            p.lexspan(2)[0],
-                            p.lexspan(2)[1] - p.lexspan(2)[0] + 1)
-                self.has_errors = True
+                self.print_error(
+                    'For loop control variable is not ordinal',
+                    p.lexspan(2)[0],
+                    p.lexspan(2)[1] - p.lexspan(2)[0] + 1
+                )
 
             if p[4] is not None and \
                 not self.type_checker.can_assign(definition.variable_type, p[4][1]):
 
-                print_error(self.file_path,
-                            self.lexer.lexdata,
-                            'Type mismatch between expression and loop control variable',
-                            self.lexer.lineno,
-                            p.lexspan(4)[0],
-                            p.lexspan(4)[1] - p.lexspan(4)[0] + 1)
-                self.has_errors = True
+                self.print_error(
+                    'Type mismatch between expression and loop control variable',
+                    p.lexspan(4)[0],
+                    p.lexspan(4)[1] - p.lexspan(4)[0] + 1
+                )
 
             if p[6] is not None and \
                 not self.type_checker.can_assign(definition.variable_type, p[6][1]):
 
-                print_error(self.file_path,
-                            self.lexer.lexdata,
-                            'Type mismatch between expression and loop control variable',
-                            self.lexer.lineno,
-                            p.lexspan(6)[0],
-                            p.lexspan(6)[1] - p.lexspan(6)[0] + 1)
-                self.has_errors = True
+                self.print_error(
+                    'Type mismatch between expression and loop control variable',
+                    p.lexspan(6)[0],
+                    p.lexspan(6)[1] - p.lexspan(6)[0] + 1
+                )
 
             p[0] = ForStatement(definition, p[4], p[6], p[5].lower(), p[8])
         except SymbolTableError:
@@ -1387,57 +1369,39 @@ class _Parser:
         '''
         unlabeled-statement : WITH variable-list DO statement
         '''
-        print_error(self.file_path,
-                    self.lexer.lexdata,
-                    'WITH statements are not supported',
-                    self.lexer.lineno,
-                    p.lexspan(1)[0],
-                    len('WITH'))
-        self.has_errors = True
+        self.print_error(
+            'WITH statements are not supported',
+            p.lexspan(1)[0],
+            len('WITH')
+        )
 
-    def p_variable_list_single(self, p: ply.yacc.YaccProduction) -> None:
+    def p_variable_list_single(self, _: ply.yacc.YaccProduction) -> None:
         '''
         variable-list : variable-usage
         '''
 
-    def p_variable_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+    def p_variable_list_multiple(self, _: ply.yacc.YaccProduction) -> None:
         '''
         variable-list : variable-list ',' variable-usage
         '''
 
-    def p_error(self, t: ply.lex.LexToken) -> None:
-        if t is None:
-            if self.lexer.lexdata.endswith('\n'):
-                eof_position = len(self.lexer.lexdata) - 1
-                line_number = self.lexer.lineno - 1
-            else:
-                eof_position = len(self.lexer.lexdata)
-                line_number = self.lexer.lineno
+    def p_error(self, t: None | ply.lex.LexToken) -> None:
+        expected_tokens = self.parser.action[self.parser.state].keys()
+        expected_tokens_str = ', '.join(t if len(t) > 1 else f'\'{t}\'' for t in expected_tokens)
 
-            print_error(self.file_path,
-                        self.lexer.lexdata,
-                        'Expecting input before end-of-file',
-                        line_number,
-                        eof_position,
-                        1)
-            string_value = ''
+        if t is None:
+            self.print_error(
+                f'Unexpected end-of-file. Expecting: {expected_tokens_str}',
+                len(self.lexer.lexdata),
+                1
+            )
         else:
             string_value = t.value if isinstance(t.value, str) else t.value.string_value
-            print_error(self.file_path,
-                        self.lexer.lexdata,
-                        f'Unexpected token: {string_value}',
-                        self.lexer.lineno,
-                        t.lexpos,
-                        len(string_value))
-
-            # Read ahead looking for a closing 'END'
-            while True:
-                tok = self.parser.token()
-                if not tok or tok.type == 'END':
-                    self.parser.errok()
-                    break
-
-        self.has_errors = True
+            self.print_error(
+                f'Unexpected token: \'{string_value}\'. Expecting: {expected_tokens_str}',
+                t.lexpos,
+                len(string_value)
+            )
 
 def create_parser(file_path: str,
                   start_production: str = 'program') -> ply.yacc.LRParser:

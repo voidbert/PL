@@ -46,8 +46,13 @@ class SymbolTable:
                 'true': ConstantDefinition('true', True),
                 'false': ConstantDefinition('false', False),
                 'maxint': ConstantDefinition('maxint', 1 << 16 - 1),
+                'write': CallableDefinition('write', None, BuiltInType.VOID, empty_body),
                 'writeln': CallableDefinition('writeln', None, BuiltInType.VOID, empty_body),
-                'readln': CallableDefinition('readln', None, BuiltInType.VOID, empty_body)
+                'readln': CallableDefinition('readln', None, BuiltInType.VOID, empty_body),
+
+                # Non-standard
+                'string': TypeDefinition('char', BuiltInType.STRING),
+                'length': CallableDefinition('length', None, BuiltInType.INTEGER, empty_body),
             }
         ]
 
