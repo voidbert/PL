@@ -161,4 +161,13 @@ class ForStatement:
     body: Statement
 
 BeginEndStatement = list['Statement']
-Statement = AssignStatement | GotoStatement | BeginEndStatement | IfStatement | Expression
+Statement = tuple[
+    AssignStatement |
+    GotoStatement |
+    BeginEndStatement |
+    IfStatement |
+    RepeatStatement |
+    WhileStatement |
+    ForStatement,
+    LabelDefinition | None
+]

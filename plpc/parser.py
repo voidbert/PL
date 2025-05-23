@@ -1164,7 +1164,8 @@ class _Parser:
         '''
         statement : unlabeled-statement
         '''
-        p[0] = p[1]
+        if p[1] is not None:
+            p[0] = (p[1], None)
 
     def p_statement_labeled(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -1186,10 +1187,13 @@ class _Parser:
                     p.lexspan(1)[0],
                     len(str(p[1]))
                 )
+
+            if p[3] is not None:
+                p[0] = (p[3], label)
         except SymbolTableError:
             self.has_errors = True
-
-        p[0] = p[3]
+            if p[3] is not None:
+                p[0] = (p[3], None)
 
     def p_unlabeled_statement_error(self, p: ply.yacc.YaccProduction) -> None:
         '''

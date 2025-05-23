@@ -16,6 +16,8 @@
 #
 # -------------------------------------------------------------------------------------------------
 
+from pprint import pprint
+
 import ply.lex
 
 # pylint: disable-next=wildcard-import,unused-wildcard-import
@@ -102,6 +104,7 @@ class SymbolTable:
                         lexspan[1] - lexspan[0] + 1)
             raise SymbolTableError()
         elif not top_scope:
+            pprint(self.scopes)
             print_error(self.file_path,
                         self.lexer.lexdata,
                         f'Label \'{identifier}\' not in the top-most scope',
@@ -206,5 +209,6 @@ class SymbolTable:
                             lexspan[0],
                             lexspan[1] - lexspan[0] + 1,
                             True)
+                self.scopes[-1][name.lower()] = value
         else:
             self.scopes[-1][name.lower()] = value
