@@ -22,7 +22,7 @@ from plpc.parser import ParserError, create_parser
 # ------------------------------------------ EASE OF USE ------------------------------------------
 
 def successful_test(source: str,
-                    start_production: str = 'program-definition') -> \
+                    start_production: str = 'program') -> \
                     Callable[[Callable[[], Any]], Callable[[], None]]:
 
     def decorator(test: Callable[[], Any]) -> Callable[[], None]:
@@ -57,12 +57,8 @@ def failing_test(source: str,
 
 # --------------------------------------- SINGLE RULE TESTS ---------------------------------------
 
-@successful_test('103')
-def test_program_definition_1() -> int:
-    return 103
-
-@failing_test('abc')
-def test_program_definition_2() -> None:
-    pass
+@successful_test('(Hello, world)', 'program-arguments')
+def test_program_definition_1() -> None:
+    return None
 
 # -------------------------------------- WHOLE PROGRAM TESTS --------------------------------------
