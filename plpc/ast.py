@@ -165,6 +165,7 @@ BeginEndStatement = list['Statement']
 Statement = tuple[
     AssignStatement |
     GotoStatement |
+    CallableCall |
     BeginEndStatement |
     IfStatement |
     RepeatStatement |

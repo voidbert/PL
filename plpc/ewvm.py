@@ -23,6 +23,7 @@ from itertools import chain
 from .ast import *
 from .error import print_unlocalized_error
 from .typechecker import TypeChecker
+from .symboltable import SymbolTable
 
 class EWVMError(Exception):
     pass
@@ -177,6 +178,89 @@ def __generate_variable_creation_assembly(variable_type: TypeValue,
     else:
         raise EWVMError()
 
+def __generate_builtin_callable_assembly(call: CallableCall) -> EWVMProgram:
+    ret = []
+    name = call.callable.name.lower()
+
+    if name in ['write', 'writeln']:
+        for argument in call.arguments:
+            if argument[1] == BuiltInType.BOOLEAN:
+                ret.append(__generate_constant_assembly('True'))
+                ret.append(__generate_constant_assembly('False'))
+                ret.append(EWVMStatement('PUSHSP'))
+                ret.append(EWVMStatement('PUSHI', 0))
+                ret.extend(__generate_expression_assembly(argument))
+                ret.append(EWVMStatement('SUB'))
+                ret.append(EWVMStatement('LOADN'))
+                ret.append(EWVMStatement('WRITES'))
+            elif argument[1] == BuiltInType.INTEGER:
+                ret.extend(__generate_expression_assembly(argument))
+                ret.append(EWVMStatement('WRITEI'))
+
+            if argument[1] == BuiltInType.REAL:
+                ret.extend(__generate_expression_assembly(argument))
+                ret.append(EWVMStatement('WRITEF'))
+
+            elif argument[1] in [BuiltInType.CHAR, BuiltInType.STRING]:
+                ret.extend(__generate_expression_assembly(argument))
+                ret.append(EWVMStatement('WRITES'))
+
+            elif isinstance(argument[1], list): # EnumeratedType
+                for value in reversed(argument[1]):
+                    ret.append(__generate_constant_assembly(value.name))
+
+                ret.append(EWVMStatement('PUSHSP'))
+                ret.append(EWVMStatement('PUSHI', 0))
+                ret.extend(__generate_expression_assembly(argument))
+                ret.append(EWVMStatement('SUB'))
+                ret.append(EWVMStatement('LOADN'))
+                ret.append(EWVMStatement('WRITES'))
+
+        if name == 'writeln':
+            ret.append(EWVMStatement('WRITELN'))
+
+    elif name == 'readln':
+        pass # TODO - implement read procedure
+
+    elif name == 'length':
+        ret.extend(__generate_expression_assembly(call.arguments[0]))
+        ret.append(EWVMStatement('STRLEN'))
+
+    return ret
+
+def __generate_callable_call_assembly(call: CallableCall) -> EWVMProgram:
+    if call.callable.name.lower() in SymbolTable('', None).scopes[0]:
+        return __generate_builtin_callable_assembly(call)
+    else:
+        ret = []
+
+        if call.callable.return_variable is not None:
+            ret.extend(__generate_variable_creation_assembly(
+                call.callable.return_variable.variable_type,
+                None,
+                0
+            ))
+
+        for argument in call.arguments:
+            ret.extend(__generate_expression_assembly(argument))
+
+        ret.append(EWVMStatement('PUSHA', Label.callable(call.callable.name)))
+        ret.append(EWVMStatement('CALL'))
+
+        total_pops = len(call.callable.body.variables) + len(call.arguments)
+        if total_pops > 0:
+            ret.append(EWVMStatement('POP', total_pops))
+
+        return ret
+
+def __generate_expression_assembly(expression: Expression) -> EWVMProgram:
+    if isinstance(expression[0], ConstantValue):
+        return [__generate_constant_assembly(expression[0])]
+    elif isinstance(expression[0], CallableCall):
+        return __generate_callable_call_assembly(expression[0])
+    else:
+        raise EWVMError()
+
 def __generate_statement_assembly(statement: Statement,
                                   call: None | CallableDefinition = None) -> EWVMProgram:
     # Statement label
@@ -184,13 +268,20 @@ def __generate_statement_assembly(statement: Statement,
     if statement[1] is not None:
         ret.append(Label.user(call, statement[1].name))
 
-    # Statement content
-    if isinstance(statement[0], list): # BeginEndStatement
+    # BeginEndStatement
+    if isinstance(statement[0], list):
         for s in statement[0]:
             ret.extend(__generate_statement_assembly(s, call))
+
+    # GOTO
     elif isinstance(statement[0], GotoStatement):
         ret.append(Comment(f'GOTO {statement[0].label.name}'))
         ret.append(EWVMStatement('JUMP', Label.user(call, statement[0].label.name)))
+
+    # Procedure call
+    elif isinstance(statement[0], CallableCall):
+        ret.append(Comment(f'{statement[0].callable.name}()'))
+        ret.extend(__generate_callable_call_assembly(statement[0]))
 
     return ret
 
@@ -233,13 +324,6 @@ def __generate_block_assembly(block: Block,
         ret.append(EWVMStatement('STOP'))
     else:
         assert call.parameters is not None
-
-        total_pops = len(block.variables) + len(call.parameters)
-        if call.return_variable is not None:
-            total_pops -= 1
-
-        if total_pops > 0:
-            ret.append(EWVMStatement('POP', total_pops))
         ret.append(EWVMStatement('RETURN'))
 
     return ret

@@ -873,6 +873,8 @@ class _Parser:
                             len(p[1])
                         )
 
+            # TODO - check for types of write, writeln, and that read only takes variables
+
             p[0] = CallableCall(definition, p[2][1])
         except SymbolTableError:
             self.has_errors = True
