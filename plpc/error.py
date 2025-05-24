@@ -48,3 +48,8 @@ def print_error(file_path: str,
     print(f'{error_location}: {color}{error_type}\033[0m: {error_message}', file=sys.stderr)
     print(f'{line_number: 6d} | {line}', file=sys.stderr)
     print(f'         {error_underline}\n', file=sys.stderr)
+
+def print_unlocalized_error(error_message: str, warning: bool = False) -> None:
+    color = '\033[93m' if warning else '\033[91m'
+    error_type = 'warning' if warning else 'error'
+    print(f'{color}{error_type}\033[0m: {error_message}', file=sys.stderr)
