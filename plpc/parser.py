@@ -839,6 +839,13 @@ class _Parser:
         '''
         callable-call : ID callable-arguments
         '''
+
+        ordinals = {
+            '1': 'st',
+            '2': 'nd',
+            '3': 'rd'
+        }
+
         try:
             definition, _ = self.symbols.query_callable(
                 p[1],
@@ -861,19 +868,35 @@ class _Parser:
 
                 for i, (left, right) in enumerate(zip(definition.parameters, p[2][1])):
                     if right and not self.type_checker.can_assign(left.variable_type, right[1]):
-                        ordinal = {
-                            '1': 'st',
-                            '2': 'nd',
-                            '3': 'rd'
-                        }.get(str(i + 1)[-1], 'th')
-
+                        ordinal = ordinals.get(str(i + 1)[-1], 'th')
                         self.print_error(
                             f'Type mismatch in {i + 1}{ordinal} argument',
                             p.lexspan(1)[0],
                             len(p[1])
                         )
+            elif definition.name in ['writeln', 'write']:
+                for i, parameter in enumerate(p[2][1]):
+                    if parameter and isinstance(parameter[1], ArrayType):
+                        ordinal = ordinals.get(str(i + 1)[-1], 'th')
+                        self.print_error(
+                            f'Type mismatch in {i + 1}{ordinal} argument: must be ordinal type',
+                            p.lexspan(1)[0],
+                            len(p[1])
+                        )
 
-            # TODO - check for types of write, writeln, and that read only takes variables
+            elif definition.name == 'readln':
+                for i, parameter in enumerate(p[2][1]):
+                    if parameter and (
+                            not isinstance(parameter[0], VariableUsage) or
+                            isinstance(parameter[1], ArrayType)
+                        ):
+                        ordinal = ordinals.get(str(i + 1)[-1], 'th')
+                        self.print_error(
+                            f'Type mismatch in {i + 1}{ordinal} argument: '
+                            'must be an ordinal variable',
+                            p.lexspan(1)[0],
+                            len(p[1])
+                        )
 
             p[0] = CallableCall(definition, p[2][1])
         except SymbolTableError:

@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 from itertools import chain
+from typing import cast, get_args
 
 # pylint: disable-next=wildcard-import,unused-wildcard-import
 from .ast import *
@@ -116,7 +117,9 @@ def __generate_constant_assembly(constant: ConstantValue) -> EWVMStatement:
         return EWVMStatement('PUSHI', int(constant))
     if isinstance(constant, float):
         return EWVMStatement('PUSHF', constant)
-    elif isinstance(constant, str):
+    elif isinstance(constant, str) and len(constant) == 1:
+        return EWVMStatement('PUSHI', ord(constant))
+    elif isinstance(constant, str) and len(constant) != 1:
         return EWVMStatement('PUSHS', constant)
     elif isinstance(constant, EnumeratedTypeConstantValue):
         return EWVMStatement('PUSHI', constant.value)
@@ -134,7 +137,7 @@ def __generate_variable_creation_assembly(variable_type: TypeValue,
     elif variable_type == BuiltInType.REAL:
         return [__generate_constant_assembly(0.0)]
     elif variable_type == BuiltInType.CHAR:
-        return [__generate_constant_assembly('0')]
+        return [__generate_constant_assembly(0)]
     elif variable_type == BuiltInType.STRING:
         return [__generate_constant_assembly('')]
     elif isinstance(variable_type, list): # EnumeratedType
@@ -178,8 +181,52 @@ def __generate_variable_creation_assembly(variable_type: TypeValue,
     else:
         raise EWVMError()
 
+def __generate_variable_read_assembly(variable: VariableUsage) -> EWVMProgram:
+    instruction = 'PUSHL' if variable.variable.callable_scope else 'PUSHG'
+    ret: EWVMProgram = [EWVMStatement(instruction, variable.variable.scope_offset)]
+
+    current_type = variable.variable.variable_type
+    type_checker = TypeChecker('', None)
+
+    array_end_i = 0
+    for index, index_type in variable.indices:
+        if isinstance(current_type, ArrayType):
+            ret.extend(__generate_expression_assembly((index, index_type)))
+            ret.append(EWVMStatement(
+                'PUSHI',
+                type_checker.get_constant_ordinal_value(current_type.dimensions[0].start))
+            )
+            ret.append(EWVMStatement('SUB'))
+
+            element_size = 1
+            for range_type in current_type.dimensions[1:]:
+                start = type_checker.get_constant_ordinal_value(range_type.start)
+                end = type_checker.get_constant_ordinal_value(range_type.end)
+                element_size *= end - start + 1
+
+            ret.append(EWVMStatement('PUSHI', element_size))
+            ret.append(EWVMStatement('MUL'))
+            ret.append(EWVMStatement('PADD'))
+
+            current_type = type_checker.type_after_indexation(current_type, index_type, (0, 0))
+            array_end_i += 1
+        else:
+            break
+
+    if array_end_i != 0:
+        ret.append(EWVMStatement('LOAD', 0))
+
+    if current_type == BuiltInType.STRING and array_end_i != len(variable.indices):
+        # pylint: disable-next=undefined-loop-variable
+        ret.extend(__generate_expression_assembly((index, index_type)))
+        ret.append(EWVMStatement('PUSHI', 1))
+        ret.append(EWVMStatement('SUB'))
+        ret.append(EWVMStatement('CHARAT'))
+
+    return ret
+
 def __generate_builtin_callable_assembly(call: CallableCall) -> EWVMProgram:
-    ret = []
+    ret: EWVMProgram = []
     name = call.callable.name.lower()
 
     if name in ['write', 'writeln']:
@@ -201,7 +248,11 @@ def __generate_builtin_callable_assembly(call: CallableCall) -> EWVMProgram:
                 ret.extend(__generate_expression_assembly(argument))
                 ret.append(EWVMStatement('WRITEF'))
 
-            elif argument[1] in [BuiltInType.CHAR, BuiltInType.STRING]:
+            elif argument[1] in [BuiltInType.CHAR]:
+                ret.extend(__generate_expression_assembly(argument))
+                ret.append(EWVMStatement('WRITECHR'))
+
+            elif argument[1] in [BuiltInType.STRING]:
                 ret.extend(__generate_expression_assembly(argument))
                 ret.append(EWVMStatement('WRITES'))
 
@@ -237,7 +288,7 @@ def __generate_callable_call_assembly(call: CallableCall) -> EWVMProgram:
         if call.callable.return_variable is not None:
             ret.extend(__generate_variable_creation_assembly(
                 call.callable.return_variable.variable_type,
-                None,
+                cast(LabelGenerator, None), # This should not be used
                 0
             ))
 
@@ -254,8 +305,10 @@ def __generate_callable_call_assembly(call: CallableCall) -> EWVMProgram:
         return ret
 
 def __generate_expression_assembly(expression: Expression) -> EWVMProgram:
-    if isinstance(expression[0], ConstantValue):
+    if isinstance(expression[0], get_args(ConstantValue)):
         return [__generate_constant_assembly(expression[0])]
+    elif isinstance(expression[0], VariableUsage):
+        return __generate_variable_read_assembly(expression[0])
     elif isinstance(expression[0], CallableCall):
         return __generate_callable_call_assembly(expression[0])
     else:
