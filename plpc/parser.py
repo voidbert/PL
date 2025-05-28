@@ -1245,6 +1245,11 @@ class _Parser:
                 len(':=')
             )
 
+        try:
+            self.type_checker.fail_on_string_indexation(p[1], p.lexspan(2))
+        except TypeCheckerError:
+            self.has_errors = True
+
         p[0] = AssignStatement(p[1], p[3])
 
     def p_unlabeled_statement_assign_error(self, p: ply.yacc.YaccProduction) -> None:

@@ -50,6 +50,7 @@ class SymbolTable:
                 'maxint': ConstantDefinition('maxint', 1 << 16 - 1),
                 'write': CallableDefinition('write', None, None, empty_body),
                 'writeln': CallableDefinition('writeln', None, None, empty_body),
+                'read': CallableDefinition('read', None, None, empty_body),
                 'readln': CallableDefinition('readln', None, None, empty_body),
 
                 # Non-standard

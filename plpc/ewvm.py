@@ -176,14 +176,23 @@ def __generate_variable_creation_assembly(variable_type: TypeValue,
         ret.append(EWVMStatement('PUSHI', array_size))
         ret.append(EWVMStatement('SUPEQ'))
         ret.append(EWVMStatement('JZ', label))
+        ret.append(EWVMStatement('POP', 1))
 
         return ret
     else:
         raise EWVMError()
 
-def __generate_variable_read_assembly(variable: VariableUsage) -> EWVMProgram:
-    instruction = 'PUSHL' if variable.variable.callable_scope else 'PUSHG'
-    ret: EWVMProgram = [EWVMStatement(instruction, variable.variable.scope_offset)]
+def __generate_variable_usage_assembly(variable: VariableUsage,
+                                       label_generator: LabelGenerator,
+                                       read_write: bool) -> EWVMProgram:
+    ret: EWVMProgram = []
+
+    if read_write and len(variable.indices) == 0:
+        instruction = 'STOREL' if variable.variable.callable_scope else 'STOREG'
+    else:
+        instruction = 'PUSHL' if variable.variable.callable_scope else 'PUSHG'
+
+    ret.append(EWVMStatement(instruction, variable.variable.scope_offset))
 
     current_type = variable.variable.variable_type
     type_checker = TypeChecker('', None)
@@ -191,7 +200,7 @@ def __generate_variable_read_assembly(variable: VariableUsage) -> EWVMProgram:
     array_end_i = 0
     for index, index_type in variable.indices:
         if isinstance(current_type, ArrayType):
-            ret.extend(__generate_expression_assembly((index, index_type)))
+            ret.extend(__generate_expression_assembly((index, index_type), label_generator))
             ret.append(EWVMStatement(
                 'PUSHI',
                 type_checker.get_constant_ordinal_value(current_type.dimensions[0].start))
@@ -214,18 +223,23 @@ def __generate_variable_read_assembly(variable: VariableUsage) -> EWVMProgram:
             break
 
     if array_end_i != 0:
-        ret.append(EWVMStatement('LOAD', 0))
+        if read_write:
+            ret.append(EWVMStatement('SWAP')) # TODO - possible optimization
+            ret.append(EWVMStatement('STORE', 0))
+        else:
+            ret.append(EWVMStatement('LOAD', 0))
 
     if current_type == BuiltInType.STRING and array_end_i != len(variable.indices):
         # pylint: disable-next=undefined-loop-variable
-        ret.extend(__generate_expression_assembly((index, index_type)))
+        ret.extend(__generate_expression_assembly((index, index_type), label_generator))
         ret.append(EWVMStatement('PUSHI', 1))
         ret.append(EWVMStatement('SUB'))
         ret.append(EWVMStatement('CHARAT'))
 
     return ret
 
-def __generate_builtin_callable_assembly(call: CallableCall) -> EWVMProgram:
+def __generate_builtin_callable_assembly(call: CallableCall,
+                                         label_generator: LabelGenerator) -> EWVMProgram:
     ret: EWVMProgram = []
     name = call.callable.name.lower()
 
@@ -236,24 +250,24 @@ def __generate_builtin_callable_assembly(call: CallableCall) -> EWVMProgram:
                 ret.append(__generate_constant_assembly('False'))
                 ret.append(EWVMStatement('PUSHSP'))
                 ret.append(EWVMStatement('PUSHI', 0))
-                ret.extend(__generate_expression_assembly(argument))
+                ret.extend(__generate_expression_assembly(argument, label_generator))
                 ret.append(EWVMStatement('SUB'))
                 ret.append(EWVMStatement('LOADN'))
                 ret.append(EWVMStatement('WRITES'))
             elif argument[1] == BuiltInType.INTEGER:
-                ret.extend(__generate_expression_assembly(argument))
+                ret.extend(__generate_expression_assembly(argument, label_generator))
                 ret.append(EWVMStatement('WRITEI'))
 
             if argument[1] == BuiltInType.REAL:
-                ret.extend(__generate_expression_assembly(argument))
+                ret.extend(__generate_expression_assembly(argument, label_generator))
                 ret.append(EWVMStatement('WRITEF'))
 
             elif argument[1] in [BuiltInType.CHAR]:
-                ret.extend(__generate_expression_assembly(argument))
+                ret.extend(__generate_expression_assembly(argument, label_generator))
                 ret.append(EWVMStatement('WRITECHR'))
 
             elif argument[1] in [BuiltInType.STRING]:
-                ret.extend(__generate_expression_assembly(argument))
+                ret.extend(__generate_expression_assembly(argument, label_generator))
                 ret.append(EWVMStatement('WRITES'))
 
             elif isinstance(argument[1], list): # EnumeratedType
@@ -262,7 +276,7 @@ def __generate_builtin_callable_assembly(call: CallableCall) -> EWVMProgram:
 
                 ret.append(EWVMStatement('PUSHSP'))
                 ret.append(EWVMStatement('PUSHI', 0))
-                ret.extend(__generate_expression_assembly(argument))
+                ret.extend(__generate_expression_assembly(argument, label_generator))
                 ret.append(EWVMStatement('SUB'))
                 ret.append(EWVMStatement('LOADN'))
                 ret.append(EWVMStatement('WRITES'))
@@ -270,18 +284,48 @@ def __generate_builtin_callable_assembly(call: CallableCall) -> EWVMProgram:
         if name == 'writeln':
             ret.append(EWVMStatement('WRITELN'))
 
-    elif name == 'readln':
-        pass # TODO - implement read procedure
+    elif name in ['readln', 'read']:
+        print_unlocalized_error(
+            f'{name} with multiple argunments will be split into multiple {name} calls',
+            True
+        )
+
+        for argument in call.arguments:
+            ret.append(EWVMStatement('READ'))
+
+            if argument[1] in [BuiltInType.INTEGER, BuiltInType.BOOLEAN] or \
+                isinstance(argument[1], list): # EnumeratedType
+
+                ret.append(EWVMStatement('ATOI'))
+            elif argument[1] == BuiltInType.REAL:
+                ret.append(EWVMStatement('ATOF'))
+            elif argument[1] == BuiltInType.CHAR:
+                end_label = label_generator.new()
+                ret.append(EWVMStatement('DUP', 2))
+                ret.append(EWVMStatement('STRLEN'))
+                ret.append(EWVMStatement('PUSHI', 1))
+                ret.append(EWVMStatement('EQUAL'))
+                ret.append(EWVMStatement('NOT'))
+                ret.append(EWVMStatement('JZ', end_label))
+                ret.append(EWVMStatement('ERR', 'More than one character written'))
+                ret.append(end_label)
+                ret.append(EWVMStatement('PUSHI', 0))
+                ret.append(EWVMStatement('CHARAT'))
+
+            assert isinstance(argument[0], VariableUsage)
+            ret.extend(__generate_variable_usage_assembly(argument[0], label_generator, True))
 
     elif name == 'length':
-        ret.extend(__generate_expression_assembly(call.arguments[0]))
+        ret.extend(__generate_expression_assembly(call.arguments[0], label_generator))
         ret.append(EWVMStatement('STRLEN'))
 
     return ret
 
-def __generate_callable_call_assembly(call: CallableCall) -> EWVMProgram:
+def __generate_callable_call_assembly(call: CallableCall,
+                                      label_generator: LabelGenerator) -> EWVMProgram:
+
     if call.callable.name.lower() in SymbolTable('', None).scopes[0]:
-        return __generate_builtin_callable_assembly(call)
+        return __generate_builtin_callable_assembly(call, label_generator)
     else:
         ret = []
 
@@ -293,7 +337,7 @@ def __generate_callable_call_assembly(call: CallableCall) -> EWVMProgram:
             ))
 
         for argument in call.arguments:
-            ret.extend(__generate_expression_assembly(argument))
+            ret.extend(__generate_expression_assembly(argument, label_generator))
 
         ret.append(EWVMStatement('PUSHA', Label.callable(call.callable.name)))
         ret.append(EWVMStatement('CALL'))
@@ -304,17 +348,20 @@ def __generate_callable_call_assembly(call: CallableCall) -> EWVMProgram:
 
         return ret
 
-def __generate_expression_assembly(expression: Expression) -> EWVMProgram:
+def __generate_expression_assembly(expression: Expression,
+                                   label_generator: LabelGenerator) -> EWVMProgram:
+
     if isinstance(expression[0], get_args(ConstantValue)):
         return [__generate_constant_assembly(expression[0])]
     elif isinstance(expression[0], VariableUsage):
-        return __generate_variable_read_assembly(expression[0])
+        return __generate_variable_usage_assembly(expression[0], label_generator, False)
     elif isinstance(expression[0], CallableCall):
-        return __generate_callable_call_assembly(expression[0])
+        return __generate_callable_call_assembly(expression[0], label_generator)
     else:
         raise EWVMError()
 
 def __generate_statement_assembly(statement: Statement,
+                                  label_generator: LabelGenerator,
                                   call: None | CallableDefinition = None) -> EWVMProgram:
     # Statement label
     ret: EWVMProgram = []
@@ -324,7 +371,13 @@ def __generate_statement_assembly(statement: Statement,
     # BeginEndStatement
     if isinstance(statement[0], list):
         for s in statement[0]:
-            ret.extend(__generate_statement_assembly(s, call))
+            ret.extend(__generate_statement_assembly(s, label_generator, call))
+
+    # Assignment
+    elif isinstance(statement[0], AssignStatement):
+        ret.append(Comment(f'{statement[0].left.variable.name} := ...'))
+        ret.extend(__generate_expression_assembly(statement[0].right, label_generator))
+        ret.extend(__generate_variable_usage_assembly(statement[0].left, label_generator, True))
 
     # GOTO
     elif isinstance(statement[0], GotoStatement):
@@ -334,7 +387,7 @@ def __generate_statement_assembly(statement: Statement,
     # Procedure call
     elif isinstance(statement[0], CallableCall):
         ret.append(Comment(f'{statement[0].callable.name}()'))
-        ret.extend(__generate_callable_call_assembly(statement[0]))
+        ret.extend(__generate_callable_call_assembly(statement[0], label_generator))
 
     return ret
 
@@ -370,7 +423,7 @@ def __generate_block_assembly(block: Block,
         ))
 
     # Statements
-    ret.extend(__generate_statement_assembly((block.body, None), call))
+    ret.extend(__generate_statement_assembly((block.body, None), label_generator, call))
 
     # Block end
     if call is None:
