@@ -285,10 +285,11 @@ def __generate_builtin_callable_assembly(call: CallableCall,
             ret.append(EWVMStatement('WRITELN'))
 
     elif name in ['readln', 'read']:
-        print_unlocalized_error(
-            f'{name} with multiple argunments will be split into multiple {name} calls',
-            True
-        )
+        if len(call.arguments) > 1:
+            print_unlocalized_error(
+                f'{name} with multiple argunments will be split into multiple {name} calls',
+                True
+            )
 
         for argument in call.arguments:
             ret.append(EWVMStatement('READ'))
@@ -351,12 +352,61 @@ def __generate_callable_call_assembly(call: CallableCall,
 def __generate_expression_assembly(expression: Expression,
                                    label_generator: LabelGenerator) -> EWVMProgram:
 
+    ret: EWVMProgram = []
+
     if isinstance(expression[0], get_args(ConstantValue)):
         return [__generate_constant_assembly(expression[0])]
     elif isinstance(expression[0], VariableUsage):
         return __generate_variable_usage_assembly(expression[0], label_generator, False)
     elif isinstance(expression[0], CallableCall):
         return __generate_callable_call_assembly(expression[0], label_generator)
+    elif isinstance(expression[0], UnaryOperation):
+        if expression[0].operator == '-':
+            if expression[0].sub[1] == BuiltInType.REAL:
+                ret.append(EWVMStatement('PUSHF', 0.0))
+            else:
+                ret.append(EWVMStatement('PUSHI', 0))
+
+            ret.extend(__generate_expression_assembly(expression[0].sub, label_generator))
+
+            instruction = 'FSUB' if expression[0].sub[1] == BuiltInType.REAL else 'SUB'
+            ret.append(EWVMStatement(instruction))
+        elif expression[0].operator == 'not':
+            ret.extend(__generate_expression_assembly(expression[0].sub, label_generator))
+            ret.append(EWVMStatement('NOT'))
+
+        return ret
+    elif isinstance(expression[0], BinaryOperation):
+        ret.extend(__generate_expression_assembly(expression[0].left, label_generator))
+        if expression[0].left[1] == BuiltInType.INTEGER and expression[1] == BuiltInType.REAL:
+            ret.append(EWVMStatement('ITOF'))
+
+        ret.extend(__generate_expression_assembly(expression[0].right, label_generator))
+        if expression[0].right[1] == BuiltInType.INTEGER and expression[1] == BuiltInType.REAL:
+            ret.append(EWVMStatement('ITOF'))
+
+        instruction = {
+            '+': 'FADD' if expression[1] == BuiltInType.REAL else 'ADD',
+            '-': 'FSUB' if expression[1] == BuiltInType.REAL else 'SUB',
+            '*': 'FMUL' if expression[1] == BuiltInType.REAL else 'MUL',
+            '/': 'FDIV',
+            'div': 'DIV',
+            'mod': 'MOD',
+            'AND': 'AND',
+            'OR': 'OR',
+            '=': 'EQUAL',
+            '<>': 'EQUAL',
+            '<': 'FINF' if expression[1] == BuiltInType.REAL else 'INF',
+            '>': 'FSUP' if expression[1] == BuiltInType.REAL else 'SUP',
+            '<=': 'FINFEQ' if expression[1] == BuiltInType.REAL else 'INFEQ',
+            '>=': 'FSUPEQ' if expression[1] == BuiltInType.REAL else 'SUPEQ'
+        }[expression[0].operator]
+
+        ret.append(EWVMStatement(instruction))
+        if expression[0].operator == '<>':
+            ret.append(EWVMStatement('NOT'))
+
+        return ret
     else:
         raise EWVMError()
 
@@ -368,13 +418,8 @@ def __generate_statement_assembly(statement: Statement,
     if statement[1] is not None:
         ret.append(Label.user(call, statement[1].name))
 
-    # BeginEndStatement
-    if isinstance(statement[0], list):
-        for s in statement[0]:
-            ret.extend(__generate_statement_assembly(s, label_generator, call))
-
     # Assignment
-    elif isinstance(statement[0], AssignStatement):
+    if isinstance(statement[0], AssignStatement):
         ret.append(Comment(f'{statement[0].left.variable.name} := ...'))
         ret.extend(__generate_expression_assembly(statement[0].right, label_generator))
         ret.extend(__generate_variable_usage_assembly(statement[0].left, label_generator, True))
@@ -388,6 +433,11 @@ def __generate_statement_assembly(statement: Statement,
     elif isinstance(statement[0], CallableCall):
         ret.append(Comment(f'{statement[0].callable.name}()'))
         ret.extend(__generate_callable_call_assembly(statement[0], label_generator))
+
+    # BeginEndStatement
+    elif isinstance(statement[0], list):
+        for s in statement[0]:
+            ret.extend(__generate_statement_assembly(s, label_generator, call))
 
     return ret
 
