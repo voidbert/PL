@@ -20,7 +20,7 @@ import sys
 
 from .lexer import LexerError
 from .parser import ParserError, create_parser
-from .ewvm import export_assembly, generate_program_assembly
+from .ewvm import export_assembly, generate_ewvm_code
 
 def main() -> None:
     source = sys.stdin.read()
@@ -28,7 +28,7 @@ def main() -> None:
     try:
         parser = create_parser('<stdin>')
         ast = parser.parse(source)
-        assembly = generate_program_assembly(ast)
+        assembly = generate_ewvm_code(ast)
         assembly_text = export_assembly(assembly)
 
         print(assembly_text)
