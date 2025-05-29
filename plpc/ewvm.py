@@ -436,7 +436,14 @@ class _EWVMCodeGenerator:
             self.__generate_statement_assembly(statement[0].when_false)
             self.program.append(end_label)
 
-        # TODO - REPEAT
+        elif isinstance(statement[0], RepeatStatement):
+            start_label = self.label_generator.new()
+
+            self.program.append(Comment('REPEAT'))
+            self.program.append(start_label)
+            self.__generate_statement_assembly((statement[0].body, None))
+            self.__generate_expression_assembly(statement[0].condition)
+            self.program.append(EWVMStatement('JZ', start_label))
 
         elif isinstance(statement[0], WhileStatement):
             start_label = self.label_generator.new()

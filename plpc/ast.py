@@ -145,7 +145,7 @@ class CaseStatement:
 
 @dataclass
 class RepeatStatement:
-    expression: Expression
+    condition: Expression
     body: list[Statement]
 
 @dataclass
