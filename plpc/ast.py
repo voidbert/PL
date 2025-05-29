@@ -57,7 +57,6 @@ class BuiltInType(IntEnum):
     REAL = 2
     CHAR = 3
     STRING = 4
-    VOID = 5
 
 EnumeratedType = list[ConstantDefinition]
 
@@ -85,6 +84,8 @@ TypeValue = BuiltInType | EnumeratedType | RangeType | ArrayType
 class VariableDefinition:
     name: str
     variable_type: TypeValue
+    callable_scope: bool
+    scope_offset: int = -1
 
 @dataclass
 class VariableUsage:
@@ -96,7 +97,7 @@ class VariableUsage:
 class CallableDefinition:
     name: str
     parameters: None | list[VariableDefinition]
-    return_type: TypeValue
+    return_variable: None | VariableDefinition
     body: Block
 
 @dataclass
@@ -144,12 +145,12 @@ class CaseStatement:
 
 @dataclass
 class RepeatStatement:
-    expression: Expression
+    condition: Expression
     body: list[Statement]
 
 @dataclass
 class WhileStatement:
-    expression: Expression
+    condition: Expression
     body: Statement
 
 @dataclass
@@ -161,4 +162,14 @@ class ForStatement:
     body: Statement
 
 BeginEndStatement = list['Statement']
-Statement = AssignStatement | GotoStatement | BeginEndStatement | IfStatement | Expression
+Statement = tuple[
+    AssignStatement |
+    GotoStatement |
+    CallableCall |
+    BeginEndStatement |
+    IfStatement |
+    RepeatStatement |
+    WhileStatement |
+    ForStatement,
+    LabelDefinition | None
+]

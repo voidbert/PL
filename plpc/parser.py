@@ -628,7 +628,7 @@ class _Parser:
         ret: list[VariableDefinition] = []
         for identifier, start in p[1]:
             try:
-                variable = VariableDefinition(identifier, p[3])
+                variable = VariableDefinition(identifier, p[3], len(self.symbols.scopes) == 2)
                 self.symbols.add(variable, (start, start + len(identifier) - 1))
                 ret.append(variable)
             except SymbolTableError:
@@ -706,7 +706,7 @@ class _Parser:
         if len(self.symbols.scopes) > 1:
             if p[1] is not None and len(p[1]) > 0 and p[1][0] is not None:
                 first_token_length = \
-                    len('PROCEDURE') if p[1][0].return_type == BuiltInType.VOID else len('FUNCTION')
+                    len('PROCEDURE') if p[1][0].return_variable is None else len('FUNCTION')
             else:
                 first_token_length = len('PROCEDURE') # On failure, just guess
 
@@ -739,7 +739,7 @@ class _Parser:
         call = CallableDefinition(
             p[1][0],
             p[1][1],
-            BuiltInType.VOID,
+            None,
             p[3]
         )
         self.symbols.unstack_top_scope()
@@ -784,8 +784,9 @@ class _Parser:
         '''
         function-heading : FUNCTION ID new-scope parameter-list ':' type-id
         '''
-        self.symbols.add(VariableDefinition(p[2], p[6]), p.lexspan(2))
-        p[0] = (p[2], p[4], p[6], p.lexspan(2)[0])
+        variable = VariableDefinition(p[2], p[6], True)
+        self.symbols.add(variable, p.lexspan(2))
+        p[0] = (p[2], p[4], variable, p.lexspan(2)[0])
 
     def p_new_scope(self, _: ply.yacc.YaccProduction) -> None:
         '''
@@ -826,7 +827,7 @@ class _Parser:
         ret: list[VariableDefinition] = []
         for identifier, start in p[1]:
             try:
-                variable = VariableDefinition(identifier, p[3])
+                variable = VariableDefinition(identifier, p[3], True)
                 self.symbols.add(variable, (start, start + len(identifier) - 1))
                 ret.append(variable)
             except SymbolTableError:
@@ -838,6 +839,13 @@ class _Parser:
         '''
         callable-call : ID callable-arguments
         '''
+
+        ordinals = {
+            '1': 'st',
+            '2': 'nd',
+            '3': 'rd'
+        }
+
         try:
             definition, _ = self.symbols.query_callable(
                 p[1],
@@ -860,14 +868,32 @@ class _Parser:
 
                 for i, (left, right) in enumerate(zip(definition.parameters, p[2][1])):
                     if right and not self.type_checker.can_assign(left.variable_type, right[1]):
-                        ordinal = {
-                            '1': 'st',
-                            '2': 'nd',
-                            '3': 'rd'
-                        }.get(str(i + 1)[-1], 'th')
-
+                        ordinal = ordinals.get(str(i + 1)[-1], 'th')
                         self.print_error(
                             f'Type mismatch in {i + 1}{ordinal} argument',
+                            p.lexspan(1)[0],
+                            len(p[1])
+                        )
+            elif definition.name in ['writeln', 'write']:
+                for i, parameter in enumerate(p[2][1]):
+                    if parameter and isinstance(parameter[1], ArrayType):
+                        ordinal = ordinals.get(str(i + 1)[-1], 'th')
+                        self.print_error(
+                            f'Type mismatch in {i + 1}{ordinal} argument: must be ordinal type',
+                            p.lexspan(1)[0],
+                            len(p[1])
+                        )
+
+            elif definition.name == 'readln':
+                for i, parameter in enumerate(p[2][1]):
+                    if parameter and (
+                            not isinstance(parameter[0], VariableUsage) or
+                            isinstance(parameter[1], ArrayType)
+                        ):
+                        ordinal = ordinals.get(str(i + 1)[-1], 'th')
+                        self.print_error(
+                            f'Type mismatch in {i + 1}{ordinal} argument: '
+                            'must be an ordinal variable',
                             p.lexspan(1)[0],
                             len(p[1])
                         )
@@ -1091,15 +1117,15 @@ class _Parser:
                         len(p[1])
                     )
             elif isinstance(obj, CallableDefinition):
-                if obj.return_type == BuiltInType.VOID:
+                if obj.return_variable is None:
                     self.print_error(
                         'This is a procedure and not a function',
                         p.lexspan(0)[0],
-                        len(p[0])
+                        len(p[1])
                     )
                 elif p[2][0] == 'CALL' or len(p[2][1]) == 0:
                     self.p_callable_call(p)
-                    p[0] = (p[0], obj.return_type)
+                    p[0] = (p[0], obj.return_variable.variable_type)
                 else:
                     self.print_error(
                         'Attempting to index function',
@@ -1164,7 +1190,8 @@ class _Parser:
         '''
         statement : unlabeled-statement
         '''
-        p[0] = p[1]
+        if p[1] is not None:
+            p[0] = (p[1], None)
 
     def p_statement_labeled(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -1186,10 +1213,13 @@ class _Parser:
                     p.lexspan(1)[0],
                     len(str(p[1]))
                 )
+
+            if p[3] is not None:
+                p[0] = (p[3], label)
         except SymbolTableError:
             self.has_errors = True
-
-        p[0] = p[3]
+            if p[3] is not None:
+                p[0] = (p[3], None)
 
     def p_unlabeled_statement_error(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -1214,6 +1244,14 @@ class _Parser:
                 p.lexspan(2)[0],
                 len(':=')
             )
+
+        try:
+            self.type_checker.fail_on_string_indexation(
+                p[1],
+                (p.lexspan(2)[0], p.lexspan(2)[0] + 1)
+            )
+        except TypeCheckerError:
+            self.has_errors = True
 
         p[0] = AssignStatement(p[1], p[3])
 
@@ -1244,7 +1282,7 @@ class _Parser:
         unlabeled-statement : callable-call
         '''
 
-        if p[1] is not None and p[1].callable.return_type != BuiltInType.VOID:
+        if p[1] is not None and p[1].callable.return_variable is not None:
             self.print_error(
                 'Calling a function, not a procedure',
                 p.lexspan(0)[0],
@@ -1277,7 +1315,7 @@ class _Parser:
         '''
         if-statement-else :
         '''
-        p[0] = []
+        p[0] = ([], None)
 
     def p_if_statement_else_non_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''

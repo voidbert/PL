@@ -178,3 +178,17 @@ class TypeChecker:
             return ArrayType(array_type.subtype, array_type.dimensions[1:])
         else:
             return array_type.subtype
+
+    def fail_on_string_indexation(self, variable: VariableUsage, lexspan: tuple[int, int]) -> None:
+        current_type = variable.variable.variable_type
+        for _, index_type in variable.indices:
+            if current_type == BuiltInType.STRING:
+                print_error(self.file_path,
+                            self.lexer.lexdata,
+                            'Invalid assignement to string',
+                            self.lexer.lineno,
+                            lexspan[0],
+                            lexspan[1] - lexspan[0] + 1)
+                raise TypeCheckerError()
+
+            current_type = self.type_after_indexation(current_type, index_type, lexspan)

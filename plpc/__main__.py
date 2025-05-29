@@ -16,11 +16,11 @@
 #
 # -------------------------------------------------------------------------------------------------
 
-from pprint import pprint
 import sys
 
 from .lexer import LexerError
 from .parser import ParserError, create_parser
+from .ewvm import export_assembly, generate_ewvm_code
 
 def main() -> None:
     source = sys.stdin.read()
@@ -28,8 +28,10 @@ def main() -> None:
     try:
         parser = create_parser('<stdin>')
         ast = parser.parse(source)
+        assembly = generate_ewvm_code(ast)
+        assembly_text = export_assembly(assembly)
 
-        pprint(ast)
+        print(assembly_text)
     except LexerError:
         print('Lexer failed. Aborting ...', file=sys.stderr)
     except ParserError:

@@ -16,6 +16,8 @@
 #
 # -------------------------------------------------------------------------------------------------
 
+from pprint import pprint
+
 import ply.lex
 
 # pylint: disable-next=wildcard-import,unused-wildcard-import
@@ -46,13 +48,18 @@ class SymbolTable:
                 'true': ConstantDefinition('true', True),
                 'false': ConstantDefinition('false', False),
                 'maxint': ConstantDefinition('maxint', 1 << 16 - 1),
-                'write': CallableDefinition('write', None, BuiltInType.VOID, empty_body),
-                'writeln': CallableDefinition('writeln', None, BuiltInType.VOID, empty_body),
-                'readln': CallableDefinition('readln', None, BuiltInType.VOID, empty_body),
+                'write': CallableDefinition('write', None, None, empty_body),
+                'writeln': CallableDefinition('writeln', None, None, empty_body),
+                'read': CallableDefinition('read', None, None, empty_body),
+                'readln': CallableDefinition('readln', None, None, empty_body),
 
                 # Non-standard
                 'string': TypeDefinition('char', BuiltInType.STRING),
-                'length': CallableDefinition('length', None, BuiltInType.INTEGER, empty_body),
+                'length': CallableDefinition('length',
+                                             None,
+                                             VariableDefinition(
+                                                'length', BuiltInType.INTEGER, True),
+                                             empty_body),
             }
         ]
 
@@ -102,6 +109,7 @@ class SymbolTable:
                         lexspan[1] - lexspan[0] + 1)
             raise SymbolTableError()
         elif not top_scope:
+            pprint(self.scopes)
             print_error(self.file_path,
                         self.lexer.lexdata,
                         f'Label \'{identifier}\' not in the top-most scope',
@@ -206,5 +214,6 @@ class SymbolTable:
                             lexspan[0],
                             lexspan[1] - lexspan[0] + 1,
                             True)
+                self.scopes[-1][name.lower()] = value
         else:
             self.scopes[-1][name.lower()] = value
