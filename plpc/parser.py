@@ -1246,7 +1246,10 @@ class _Parser:
             )
 
         try:
-            self.type_checker.fail_on_string_indexation(p[1], p.lexspan(2))
+            self.type_checker.fail_on_string_indexation(
+                p[1],
+                (p.lexspan(2)[0], p.lexspan(2)[0] + 1)
+            )
         except TypeCheckerError:
             self.has_errors = True
 
