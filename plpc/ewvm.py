@@ -119,7 +119,7 @@ class _EWVMCodeGenerator:
         self.callable: None | CallableDefinition = None
         self.type_checker = TypeChecker('', None)
 
-    def __generate_constant_assembly(self, constant: ConstantValue) -> None:
+    def generate_constant_assembly(self, constant: ConstantValue) -> None:
         if isinstance(constant, (bool, int)):
             self.program.append(EWVMStatement('PUSHI', int(constant)))
         elif isinstance(constant, float):
@@ -132,7 +132,7 @@ class _EWVMCodeGenerator:
         elif isinstance(constant, EnumeratedTypeConstantValue):
             self.program.append(EWVMStatement('PUSHI', constant.value))
 
-    def __generate_variable_creation_assembly(self,
+    def generate_variable_creation_assembly(self,
                                               variable_type: TypeValue,
                                               scope_offset: int) -> None:
 
@@ -154,7 +154,7 @@ class _EWVMCodeGenerator:
             self.program.append(label)
             self.program.append(EWVMStatement('PUSHL', scope_offset))
             self.program.append(EWVMStatement('PUSHL', scope_offset + 1))
-            self.__generate_variable_creation_assembly(variable_type.subtype, scope_offset)
+            self.generate_variable_creation_assembly(variable_type.subtype, scope_offset)
             self.program.append(EWVMStatement('STOREN'))
             self.program.append(EWVMStatement('PUSHI', 1))
             self.program.append(EWVMStatement('ADD'))
@@ -176,9 +176,9 @@ class _EWVMCodeGenerator:
                 assert isinstance(first_constant, EnumeratedTypeConstantValue)
                 constant = first_constant.value
 
-            self.__generate_constant_assembly(constant)
+            self.generate_constant_assembly(constant)
 
-    def __generate_variable_usage_assembly(self, usage: VariableUsage, read_write: bool) -> None:
+    def generate_variable_usage_assembly(self, usage: VariableUsage, read_write: bool) -> None:
         if read_write and len(usage.indices) == 0:
             instruction = 'STOREL' if usage.variable.callable_scope else 'STOREG'
         else:
@@ -190,7 +190,7 @@ class _EWVMCodeGenerator:
         array_end_i = 0
         for index, index_type in usage.indices:
             if isinstance(current_type, ArrayType):
-                self.__generate_expression_assembly((index, index_type))
+                self.generate_expression_assembly((index, index_type))
                 self.program.append(EWVMStatement(
                     'PUSHI',
                     self.type_checker.get_constant_ordinal_value(current_type.dimensions[0].start))
@@ -225,18 +225,18 @@ class _EWVMCodeGenerator:
 
         if current_type == BuiltInType.STRING and array_end_i != len(usage.indices):
             # pylint: disable-next=undefined-loop-variable
-            self.__generate_expression_assembly((index, index_type))
+            self.generate_expression_assembly((index, index_type))
             self.program.append(EWVMStatement('PUSHI', 1))
             self.program.append(EWVMStatement('SUB'))
             self.program.append(EWVMStatement('CHARAT'))
 
-    def __generate_expression_assembly(self, expression: Expression) -> None:
+    def generate_expression_assembly(self, expression: Expression) -> None:
         if isinstance(expression[0], get_args(ConstantValue)):
-            self.__generate_constant_assembly(expression[0])
+            self.generate_constant_assembly(expression[0])
         elif isinstance(expression[0], VariableUsage):
-            self.__generate_variable_usage_assembly(expression[0], False)
+            self.generate_variable_usage_assembly(expression[0], False)
         elif isinstance(expression[0], CallableCall):
-            self.__generate_callable_call_assembly(expression[0])
+            self.generate_callable_call_assembly(expression[0])
         elif isinstance(expression[0], UnaryOperation):
             if expression[0].operator == '-':
                 if expression[0].sub[1] == BuiltInType.REAL:
@@ -244,22 +244,22 @@ class _EWVMCodeGenerator:
                 else:
                     self.program.append(EWVMStatement('PUSHI', 0))
 
-                self.__generate_expression_assembly(expression[0].sub)
+                self.generate_expression_assembly(expression[0].sub)
 
                 self.program.append(
                     EWVMStatement('FSUB' if expression[0].sub[1] == BuiltInType.REAL else 'SUB')
                 )
 
             elif expression[0].operator == 'not':
-                self.__generate_expression_assembly(expression[0].sub)
+                self.generate_expression_assembly(expression[0].sub)
                 self.program.append(EWVMStatement('NOT'))
 
         elif isinstance(expression[0], BinaryOperation):
-            self.__generate_expression_assembly(expression[0].left)
+            self.generate_expression_assembly(expression[0].left)
             if expression[0].left[1] == BuiltInType.INTEGER and expression[1] == BuiltInType.REAL:
                 self.program.append(EWVMStatement('ITOF'))
 
-            self.__generate_expression_assembly(expression[0].right)
+            self.generate_expression_assembly(expression[0].right)
             if expression[0].right[1] == BuiltInType.INTEGER and expression[1] == BuiltInType.REAL:
                 self.program.append(EWVMStatement('ITOF'))
 
@@ -289,44 +289,44 @@ class _EWVMCodeGenerator:
             if expression[0].operator == '<>':
                 self.program.append(EWVMStatement('NOT'))
 
-    def __generate_builtin_callable_assembly(self, call: CallableCall) -> None:
+    def generate_builtin_callable_assembly(self, call: CallableCall) -> None:
         name = call.callable.name.lower()
 
         if name in ['write', 'writeln']:
             for argument in call.arguments:
                 if argument[1] == BuiltInType.BOOLEAN:
-                    self.__generate_constant_assembly('True')
-                    self.__generate_constant_assembly('False')
+                    self.generate_constant_assembly('True')
+                    self.generate_constant_assembly('False')
                     self.program.append(EWVMStatement('PUSHSP'))
                     self.program.append(EWVMStatement('PUSHI', 0))
-                    self.__generate_expression_assembly(argument)
+                    self.generate_expression_assembly(argument)
                     self.program.append(EWVMStatement('SUB'))
                     self.program.append(EWVMStatement('LOADN'))
                     self.program.append(EWVMStatement('WRITES'))
 
                 elif argument[1] == BuiltInType.INTEGER:
-                    self.__generate_expression_assembly(argument)
+                    self.generate_expression_assembly(argument)
                     self.program.append(EWVMStatement('WRITEI'))
 
                 elif argument[1] == BuiltInType.REAL:
-                    self.__generate_expression_assembly(argument)
+                    self.generate_expression_assembly(argument)
                     self.program.append(EWVMStatement('WRITEF'))
 
                 elif argument[1] in [BuiltInType.CHAR]:
-                    self.__generate_expression_assembly(argument)
+                    self.generate_expression_assembly(argument)
                     self.program.append(EWVMStatement('WRITECHR'))
 
                 elif argument[1] in [BuiltInType.STRING]:
-                    self.__generate_expression_assembly(argument)
+                    self.generate_expression_assembly(argument)
                     self.program.append(EWVMStatement('WRITES'))
 
                 elif isinstance(argument[1], list): # EnumeratedType
                     for value in reversed(argument[1]):
-                        self.__generate_constant_assembly(value.name)
+                        self.generate_constant_assembly(value.name)
 
                     self.program.append(EWVMStatement('PUSHSP'))
                     self.program.append(EWVMStatement('PUSHI', 0))
-                    self.__generate_expression_assembly(argument)
+                    self.generate_expression_assembly(argument)
                     self.program.append(EWVMStatement('SUB'))
                     self.program.append(EWVMStatement('LOADN'))
                     self.program.append(EWVMStatement('WRITES'))
@@ -364,27 +364,27 @@ class _EWVMCodeGenerator:
                     self.program.append(EWVMStatement('CHARAT'))
 
                 assert isinstance(argument[0], VariableUsage)
-                self.__generate_variable_usage_assembly(argument[0], True)
+                self.generate_variable_usage_assembly(argument[0], True)
 
             if name == 'readln':
                 self.program.append(EWVMStatement('WRITELN'))
 
         elif name == 'length':
-            self.__generate_expression_assembly(call.arguments[0])
+            self.generate_expression_assembly(call.arguments[0])
             self.program.append(EWVMStatement('STRLEN'))
 
-    def __generate_callable_call_assembly(self, call: CallableCall) -> None:
+    def generate_callable_call_assembly(self, call: CallableCall) -> None:
         if call.callable.name.lower() in SymbolTable('', None).scopes[0]:
-            self.__generate_builtin_callable_assembly(call)
+            self.generate_builtin_callable_assembly(call)
         else:
             if call.callable.return_variable is not None:
-                self.__generate_variable_creation_assembly(
+                self.generate_variable_creation_assembly(
                     call.callable.return_variable.variable_type,
                     0
                 )
 
             for argument in call.arguments:
-                self.__generate_expression_assembly(argument)
+                self.generate_expression_assembly(argument)
 
             self.program.append(EWVMStatement('PUSHA', Label.callable(call.callable.name)))
             self.program.append(EWVMStatement('CALL'))
@@ -393,7 +393,7 @@ class _EWVMCodeGenerator:
             if total_pops > 0:
                 self.program.append(EWVMStatement('POP', total_pops))
 
-    def __generate_statement_assembly(self, statement: Statement) -> None:
+    def generate_statement_assembly(self, statement: Statement) -> None:
         # Statement label
         if statement[1] is not None:
             self.program.append(Label.user(self.callable, statement[1].name))
@@ -401,8 +401,8 @@ class _EWVMCodeGenerator:
         # Variable assignment
         if isinstance(statement[0], AssignStatement):
             self.program.append(Comment(f'{statement[0].left.variable.name} := ...'))
-            self.__generate_expression_assembly(statement[0].right)
-            self.__generate_variable_usage_assembly(statement[0].left, True)
+            self.generate_expression_assembly(statement[0].right)
+            self.generate_variable_usage_assembly(statement[0].left, True)
 
         # GOTO
         elif isinstance(statement[0], GotoStatement):
@@ -415,12 +415,12 @@ class _EWVMCodeGenerator:
         # Procedure call
         elif isinstance(statement[0], CallableCall):
             self.program.append(Comment(f'{statement[0].callable.name}()'))
-            self.__generate_callable_call_assembly(statement[0])
+            self.generate_callable_call_assembly(statement[0])
 
         # BeginEndStatement
         elif isinstance(statement[0], list):
             for s in statement[0]:
-                self.__generate_statement_assembly(s)
+                self.generate_statement_assembly(s)
 
         # IF
         elif isinstance(statement[0], IfStatement):
@@ -428,12 +428,12 @@ class _EWVMCodeGenerator:
             end_label = self.label_generator.new()
 
             self.program.append(Comment('IF'))
-            self.__generate_expression_assembly(statement[0].condition)
+            self.generate_expression_assembly(statement[0].condition)
             self.program.append(EWVMStatement('JZ', else_label))
-            self.__generate_statement_assembly(statement[0].when_true)
+            self.generate_statement_assembly(statement[0].when_true)
             self.program.append(EWVMStatement('JUMP', end_label))
             self.program.append(else_label)
-            self.__generate_statement_assembly(statement[0].when_false)
+            self.generate_statement_assembly(statement[0].when_false)
             self.program.append(end_label)
 
         elif isinstance(statement[0], RepeatStatement):
@@ -441,8 +441,8 @@ class _EWVMCodeGenerator:
 
             self.program.append(Comment('REPEAT'))
             self.program.append(start_label)
-            self.__generate_statement_assembly((statement[0].body, None))
-            self.__generate_expression_assembly(statement[0].condition)
+            self.generate_statement_assembly((statement[0].body, None))
+            self.generate_expression_assembly(statement[0].condition)
             self.program.append(EWVMStatement('JZ', start_label))
 
         elif isinstance(statement[0], WhileStatement):
@@ -451,9 +451,9 @@ class _EWVMCodeGenerator:
 
             self.program.append(Comment('WHILE'))
             self.program.append(start_label)
-            self.__generate_expression_assembly(statement[0].condition)
+            self.generate_expression_assembly(statement[0].condition)
             self.program.append(EWVMStatement('JZ', end_label))
-            self.__generate_statement_assembly(statement[0].body)
+            self.generate_statement_assembly(statement[0].body)
             self.program.append(EWVMStatement('JUMP', start_label))
             self.program.append(end_label)
 
@@ -462,12 +462,12 @@ class _EWVMCodeGenerator:
             end_label = self.label_generator.new()
 
             self.program.append(Comment('FOR'))
-            self.__generate_expression_assembly(statement[0].final_expression)
-            self.__generate_expression_assembly(statement[0].initial_expression)
+            self.generate_expression_assembly(statement[0].final_expression)
+            self.generate_expression_assembly(statement[0].initial_expression)
 
             self.program.append(start_label)
             self.program.append(EWVMStatement('DUP', 1))
-            self.__generate_variable_usage_assembly(
+            self.generate_variable_usage_assembly(
                 VariableUsage(statement[0].variable, statement[0].variable.variable_type, []),
                 True
             )
@@ -479,7 +479,7 @@ class _EWVMCodeGenerator:
                 self.program.append(EWVMStatement('INFEQ'))
             self.program.append(EWVMStatement('JZ', end_label))
 
-            self.__generate_statement_assembly(statement[0].body)
+            self.generate_statement_assembly(statement[0].body)
 
             self.program.append(EWVMStatement('PUSHI', 1))
             if statement[0].direction == 'to':
@@ -492,7 +492,7 @@ class _EWVMCodeGenerator:
             self.program.append(end_label)
             self.program.append(EWVMStatement('POP', 2))
 
-    def __generate_block_assembly(self, block: Block) -> None:
+    def generate_block_assembly(self, block: Block) -> None:
         # Block start
         if self.callable is None:
             self.program.append(EWVMStatement('START'))
@@ -516,13 +516,13 @@ class _EWVMCodeGenerator:
             variable.scope_offset = i
 
             self.program.append(Comment(f'{variable.name} initialization'))
-            self.__generate_variable_creation_assembly(
+            self.generate_variable_creation_assembly(
                 variable.variable_type,
                 variable.scope_offset
             )
 
         # Statements
-        self.__generate_statement_assembly((block.body, None))
+        self.generate_statement_assembly((block.body, None))
 
         # Block end
         if self.callable is None:
@@ -533,12 +533,12 @@ class _EWVMCodeGenerator:
 
     def generate_program_assembly(self, program: Program) -> EWVMProgram:
         self.callable = None
-        self.__generate_block_assembly(program.block)
+        self.generate_block_assembly(program.block)
 
         # Callables can only occur at the top level
         for call in program.block.callables:
             self.callable = call
-            self.__generate_block_assembly(call.body)
+            self.generate_block_assembly(call.body)
 
         return self.program
 
