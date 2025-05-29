@@ -436,6 +436,7 @@ class _EWVMCodeGenerator:
             self.generate_statement_assembly(statement[0].when_false)
             self.program.append(end_label)
 
+        # REPEAT
         elif isinstance(statement[0], RepeatStatement):
             start_label = self.label_generator.new()
 
@@ -445,6 +446,7 @@ class _EWVMCodeGenerator:
             self.generate_expression_assembly(statement[0].condition)
             self.program.append(EWVMStatement('JZ', start_label))
 
+        # WHILE
         elif isinstance(statement[0], WhileStatement):
             start_label = self.label_generator.new()
             end_label = self.label_generator.new()
@@ -457,6 +459,7 @@ class _EWVMCodeGenerator:
             self.program.append(EWVMStatement('JUMP', start_label))
             self.program.append(end_label)
 
+        # FOR
         elif isinstance(statement[0], ForStatement):
             start_label = self.label_generator.new()
             end_label = self.label_generator.new()
@@ -523,6 +526,14 @@ class _EWVMCodeGenerator:
 
         # Statements
         self.generate_statement_assembly((block.body, None))
+
+        # Heap variable deletion
+        for variable in reversed(block.variables):
+            if isinstance(variable.variable_type, ArrayType):
+                # NOTE: FREE doesn't work as intended, and this is only possible because no dynamic
+                #       memory allocation is being performed
+                self.program.append(Comment(f'{variable.name} finalization'))
+                self.program.append(EWVMStatement('POPST'))
 
         # Block end
         if self.callable is None:
