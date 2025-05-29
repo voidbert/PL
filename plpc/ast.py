@@ -150,7 +150,7 @@ class RepeatStatement:
 
 @dataclass
 class WhileStatement:
-    expression: Expression
+    condition: Expression
     body: Statement
 
 @dataclass

@@ -1315,7 +1315,7 @@ class _Parser:
         '''
         if-statement-else :
         '''
-        p[0] = []
+        p[0] = ([], None)
 
     def p_if_statement_else_non_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''

@@ -366,6 +366,9 @@ class _EWVMCodeGenerator:
                 assert isinstance(argument[0], VariableUsage)
                 self.__generate_variable_usage_assembly(argument[0], True)
 
+            if name == 'readln':
+                self.program.append(EWVMStatement('WRITELN'))
+
         elif name == 'length':
             self.__generate_expression_assembly(call.arguments[0])
             self.program.append(EWVMStatement('STRLEN'))
@@ -418,6 +421,69 @@ class _EWVMCodeGenerator:
         elif isinstance(statement[0], list):
             for s in statement[0]:
                 self.__generate_statement_assembly(s)
+
+        # IF
+        elif isinstance(statement[0], IfStatement):
+            else_label = self.label_generator.new()
+            end_label = self.label_generator.new()
+
+            self.program.append(Comment('IF'))
+            self.__generate_expression_assembly(statement[0].condition)
+            self.program.append(EWVMStatement('JZ', else_label))
+            self.__generate_statement_assembly(statement[0].when_true)
+            self.program.append(EWVMStatement('JUMP', end_label))
+            self.program.append(else_label)
+            self.__generate_statement_assembly(statement[0].when_false)
+            self.program.append(end_label)
+
+        # TODO - REPEAT
+
+        elif isinstance(statement[0], WhileStatement):
+            start_label = self.label_generator.new()
+            end_label = self.label_generator.new()
+
+            self.program.append(Comment('WHILE'))
+            self.program.append(start_label)
+            self.__generate_expression_assembly(statement[0].condition)
+            self.program.append(EWVMStatement('JZ', end_label))
+            self.__generate_statement_assembly(statement[0].body)
+            self.program.append(EWVMStatement('JUMP', start_label))
+            self.program.append(end_label)
+
+        elif isinstance(statement[0], ForStatement):
+            start_label = self.label_generator.new()
+            end_label = self.label_generator.new()
+
+            self.program.append(Comment('FOR'))
+            self.__generate_expression_assembly(statement[0].final_expression)
+            self.__generate_expression_assembly(statement[0].initial_expression)
+
+            self.program.append(start_label)
+            self.program.append(EWVMStatement('DUP', 1))
+            self.__generate_variable_usage_assembly(
+                VariableUsage(statement[0].variable, statement[0].variable.variable_type, []),
+                True
+            )
+
+            self.program.append(EWVMStatement('COPY', 2))
+            if statement[0].direction == 'to':
+                self.program.append(EWVMStatement('SUPEQ'))
+            elif statement[0].direction == 'downto':
+                self.program.append(EWVMStatement('INFEQ'))
+            self.program.append(EWVMStatement('JZ', end_label))
+
+            self.__generate_statement_assembly(statement[0].body)
+
+            self.program.append(EWVMStatement('PUSHI', 1))
+            if statement[0].direction == 'to':
+                self.program.append(EWVMStatement('ADD'))
+            elif statement[0].direction == 'downto':
+                self.program.append(EWVMStatement('SUB'))
+            self.program.append(EWVMStatement('JUMP', start_label))
+
+            self.program.append(EWVMStatement('JZ', start_label))
+            self.program.append(end_label)
+            self.program.append(EWVMStatement('POP', 2))
 
     def __generate_block_assembly(self, block: Block) -> None:
         # Block start
