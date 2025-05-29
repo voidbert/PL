@@ -218,7 +218,7 @@ class _EWVMCodeGenerator:
 
         if array_end_i != 0:
             if read_write:
-                self.program.append(EWVMStatement('SWAP')) # TODO - possible optimization
+                self.program.append(EWVMStatement('SWAP'))
                 self.program.append(EWVMStatement('STORE', 0))
             else:
                 self.program.append(EWVMStatement('LOAD', 0))
