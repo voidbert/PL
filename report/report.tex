@@ -2,7 +2,6 @@
 
 \usepackage[portuguese]{babel}
 \usepackage{caption}
-\usepackage{cite}
 \usepackage{float}
 \usepackage[a4paper, margin=2cm]{geometry}
 \usepackage{graphicx}
@@ -50,6 +49,15 @@
 \pagebreak
 
 \begin{abstract}
+    Ao longo do último semestre, foi desenvolvido, no âmbito da UC de Processamento de Linguagens,
+    um compilador de Pascal Standard \cite{iso} para a \emph{stack machine} EWVM \cite{ewvm}. O
+    desenvolvimento dos analisadores léxico, sintático e semântico foi feito em duas fases: em
+    primeiro lugar, criaram-se versões mínimas destes componentes, funcionais para um conjunto
+    reduzido de programas de exemplo, que depois foram enriquecidas com informação do
+    \emph{standard} ISO, garantido que o compilador desenvolvido implementava a linguagem com
+    correção. Já a geração de código máquina foi feita diretamente com base na documentação da EWVM.
+    Os resultados obtidos, apesar de irem além do que foi pedido pelo enunciado do trabalho prático
+    proposto, não cumprem por completo o \emph{standard} ISO.
 \end{abstract}
 
 \section{Arquitetura}
@@ -64,8 +72,98 @@
 
 \section{Otimização de Código}
 
+\section{Erros Descritivos}
+
+\section{Testes Realizados}
+
 \section{Resultados Obtidos}
 
+O compilador desenvolvido, tal como requisitado, é capaz de transformar programas Pascal
+\emph{standard} em \emph{assembly} EWVM.
+
+De um ponto de vista funcional, o compilador suporta várias construções da linguagem, desde as
+consideradas obrigatórias pelo enunciado (declaração de variáveis, expressões aritméticas e comandos
+de controlo de fluxo), como também outras sugeridas pelo enunciado (procedimentos e funções).
+Ademais, foram também implementadas outras partes do \emph{standard}, como declaração de
+\emph{labels}, constantes e tipos de dados (\emph{aliases}, tipos enumerados, \emph{ranges} e até
+\emph{arrays} multidimensionais). Ademais, foi implementado o tipo \texttt{string} e a função
+\texttt{length} que, apesar de não estarem incluídos no \emph{standard} ISO, são necessários para a
+compilação dos programas de exemplo fornecidos pela equipa docente.
+
+No entanto, há várias funcionalidades de Pascal que são implementadas de uma forma limitada, e
+outras que, devido a falta de tempo, não foram de todo implementadas. Uma das principais limitações
+na implementação existente do compilador é a impossibilidade da definição de procedimentos e funções
+recursivos: permiti-lo implicaria mudanças substanciais à implementação da tabela de símbolos, para
+ser possível, por exemplo, distinguir entre uma chamada recursiva de uma função e a definição do
+valor a devolver. Destaca-se também a impossibilidade de passar \emph{arrays} como argumentos de
+funções e procedimentos. Em relação às funcionalidades por implementar, destacam-se os vários tipos
+de dados por suportar (apontadores, \emph{records}, \emph{sets} e \emph{files}), bem como os
+operadores a si associados.
+
+Em relação à correção do compilador, este foi capaz de compilar corretamente os programas de teste
+fornecidos pela equipa docente, bem como outros testes construídos pelo grupo de trabalho, que
+testam funcionalidades específicas e complexas, onde podem residir falhas. A passagem destes testes
+não prova a correção completa do compilador, mas ajuda a aumentar a confiança que se tem no mesmo.
+
+Quanto à estrutura do compilador, considera-se que o código desenvolvido é modular e facilmente
+extensível. A título de exemplo, devido à estrutura intermédia emitida pelo \emph{parser}, mais rica
+em informação do que uma AST vulgar, foi trivial a implementação de geração de código para a EWVM,
+bem como também seria a adição de outros \emph{backends}, como, por exemplo, para \emph{output} de
+código C \cite{c} ou LLVM \cite{llvm}. Ademais, o código Python escrito foi todo tipado, e estes
+tipos verificados com o \texttt{mypy} \cite{mypy}. A informação de tipos constitui uma grande fonte
+de documentação que, juntamente com nomes de variáveis descritivos, permite uma compreensão fácil
+do significado de diversos métodos, de campos de estruturas de dados, \emph{etc.}
+
+Por último, o compilador desenvolvido é bastante eficiente, na medida que foi arquitetado para
+minimizar o número de iterações pelas várias estruturas com que lida (código fonte, grafo
+intermédio, e representação intermédia do \emph{asssembly} EWVM). O compilador também é capaz de
+gerar código eficiente, sendo usadas técnicas de manipulação de AST e de otimização \emph{peephole}
+para melhorar o desempenho do código. Note-se que as otimizações feitas são bastante limitadas,
+visto que otimizações mais complexas exigiriam a construção de grafos de controlo de fluxo, e o
+desenvolvimento de outras representações intermédias, possivelmente da forma
+\emph{single static-assignment} (SSA), tal como o LLVM \cite{llvm}.
+
 \section{Conclusão}
+
+Em suma, ao longo do último semestre, foi desenvolvido, no âmbito da UC de Processamento de
+Linguagens, um compilador de Pascal Standard \cite{iso} para a \emph{stack machine} EWVM
+\cite{ewvm}. Devido a falta de tempo, não foi possível explorar este problema tanto quanto era
+inicialmente desejado: no início deste projeto, considerou-se a possibilidade de se suportar o
+\emph{standard} ISO completo, bem como mais \emph{backends} além de EWVM. No entanto, aprendeu-se
+que a implementação de um compilador não é nada simples: apesar da especificação de Pascal ser
+curta e utilizar uma linguagem pouco complexa, ao contrário de outras linguagens, ter o cuidado
+de suportar os vários erros e \emph{edge-cases} possíveis consumiu a maior parte do tempo de
+desenvolvimento. Ademais, foi necessário garantir que todas as funcionalidades conseguiam coexistir
+umas com as outras sem conflitos, garantindo uma geração de \emph{assembly} correta
+independentemente do código Pascal escrito. Por último, com o desenvolvimento deste compilador,
+percebeu-se o motivo pelo qual as técnicas de otimização são geralmente feitas em representações
+intermédias na forma SSA, tendo-se chegado à conclusão de que as otimizações \emph{peephole} e por
+manipulação da árvore de sintaxe abstrata são bastante limitadas. Apesar do compilador desenvolvido
+não ter atingido os objetivos inicialmente planeados, cumpre os requisitos do enunciado do trabalho
+prático e implementa várias outras funcionalidades adicionais, pelo que se considera que este
+projeto foi concluído com sucesso.
+
+\begingroup
+\section{Bibliografia}
+\renewcommand{\section}[2]{}
+
+\begin{thebibliography}{9}
+    \bibitem{iso}
+        \emph{Information Technology -- Programming Languages -- Pascal}, ISO 7185, 1990. [Online].
+        Available: \url{https://archive.org/details/iso-iec-7185-1990-Pascal}
+    \bibitem{ewvm}
+        S. Rocha, J. Ramalho. ``Virtual Machine EWVM.'' EWVM. Accessed: May 29, 2025. [Online.]
+        Available: \url{https://ewvm.epl.di.uminho.pt/}
+    \bibitem{c}
+        \emph{Information Technology -- Programming Languages -- C}, ISO 9899, 2024. [Online].
+        Available: \url{https://www.iso.org/standard/82075.html}
+    \bibitem{llvm}
+        LLVM-admin team.``The LLVM Compiler Infrastructure.'' LLVM. Accessed: May 29, 2025.
+        [Online.] Available: \url{https://llvm.org/}
+    \bibitem{mypy}
+        The mypy project.``mypy.'' mypy. Accessed: May 29, 2025. [Online.] Available:
+        \url{https://mypy-lang.org/}
+\end{thebibliography}
+\endgroup
 
 \end{document}
