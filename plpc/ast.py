@@ -139,9 +139,14 @@ class IfStatement:
     when_false: Statement
 
 @dataclass
+class CaseElement:
+    labels: list[ConstantValue]
+    body: Statement
+
+@dataclass
 class CaseStatement:
     expression: Expression
-    # cases: list[tuple[list[ConstantValue]], ]
+    elements: list[CaseElement]
 
 @dataclass
 class RepeatStatement:
@@ -168,6 +173,7 @@ Statement = tuple[
     CallableCall |
     BeginEndStatement |
     IfStatement |
+    CaseStatement |
     RepeatStatement |
     WhileStatement |
     ForStatement,
