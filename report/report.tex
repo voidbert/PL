@@ -6,10 +6,34 @@
 \usepackage[a4paper, margin=2cm]{geometry}
 \usepackage{graphicx}
 \usepackage{hyperref}
+\usepackage{listings}
 \usepackage{setspace}
-\usepackage{xcolor}
+\usepackage[x11names]{xcolor}
 
 \chardef\_=`_
+
+\lstdefinestyle{codestyle}{
+    language=pascal,
+    commentstyle=\color{teal},
+    keywordstyle=\color{blue},
+    numberstyle=\ttfamily\color{gray},
+    stringstyle=\color{red},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=false,
+    keepspaces=true,
+    numbers=none,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4,
+}
+
+\lstset{
+    style=codestyle,
+    inputencoding=utf8,
+    extendedchars=true
+}
 
 \title{
     \vspace*{\fill}
@@ -73,6 +97,126 @@
 \section{Otimização de Código}
 
 \section{Erros Descritivos}
+
+Quando um compilador encontra erros no código fonte, deve apresentá-los ao utilizador. A qualidade
+destes erros é crucial, devendo ajudar o utilizador a facilmente identificá-los e corrigi-los. No
+compilador desenvolvido, procurou-se apresentar os erros léxicos, sintáticos, semânticos, e de
+geração de código de modo a providenciar a melhor experiência possível ao utilizador.
+
+Durante a análise léxica, o \emph{lexer} apresenta ao utilizador sequências de caracteres que não
+foram reconhecidas, ao contrário de um erro por caractere, como era feito nas aulas práticas da UC.
+Deste modo, caso o código fonte contenha vários caracteres inválidos em sequência, o utilizador não
+se deparará com dezenas de erros. Ademais, o analisador léxico é capaz de ignorar estas sequências
+inválidas, e prosseguir com a análise léxica. Abaixo, apresenta-se um exemplo deste erro:
+
+\lstset{
+    language={},
+    keywordstyle=\color{red},
+    morekeywords={error},
+    literate=
+        {~}{{{\color{red}\~{}}}}1
+        {^}{{{\color{red}\^{}}}}1
+        {ã}{{\~{a}}}1
+        {ç}{{\c{c}}}1
+}
+
+\begin{lstlisting}
+
+<stdin>:3:10: error: Lexer failed to reconize the following characters
+     3 |     iteração = 0;
+                  ^~
+\end{lstlisting}
+
+Como se pode observar, os erros são formatos para que seja possível ao utilizador ver a mensagem de
+erro, a sua localização no código, e o código que causou o erro. Esta formatação foi inspirada na
+formatação utilizada pelas versões mais recentes do GCC \cite{gcc-errors}.
+
+Em relação à análise sintática, quando um erro é detetado, o autómato LALR é inspecionado para
+informar o utilizador que, apesar de um lexema de um dado tipo ter sido encontrado, o autómato
+esperava outros tipos de lexema:
+
+\begin{lstlisting}
+
+<stdin>:3:17: error: Unexpected token: 'begin'. Expecting: '(', ';'
+     3 | procedure hello begin
+                         ^~~~~
+\end{lstlisting}
+
+Também foram adicionadas regras à gramática para reconhecer erros frequentes, cujas ações semânticas
+apresentam mensagens de erro com sugestões ao utilizador de como pode corrigir o seu código:
+
+\begin{lstlisting}
+
+<stdin>:5:7: error: Did you mean to use ':='?
+     5 |     x = 0;
+               ^
+\end{lstlisting}
+
+Infelizmente, quando um lexema inesperado é encontrado, a análise do autómato para determinar os
+lexemas possíveis na posição do erro também será influenciada por estas regras de erro, e a lista
+de lexemas esperados não estará completamente correta. No entanto, na prática, esta lista é mais
+do que suficiente para o utilizador rapidamente se aperceber que, por exemplo, se esqueceu de um
+ponto e vírgula. No entanto, esta falta de controlo sobre o autómato de \emph{parsing} ajudou à
+compreensão do motivo pelo qual vários compiladores utilizam \emph{parsers} recursivos descendentes
+escritos à mão, em vez de geradores de \emph{parsers}. \cite{compilers-handwritten-parser}
+
+Em relação à recuperação de erros, esta é muito limitada. Visto que a análise semântica é feita em
+simultâneo com a análise sintática, um erro de sintaxe que, por exemplo, faça com que uma constante,
+variável, \ldots, não seja declarada, fará surgir erros em cascata em todo o código que usa essa
+constante / variável / \ldots. Para os evitar, a recuperação de erros apenas é possível com erros
+mínimos.
+
+{\color{red} TODO - mais informação sobre recuperação de erros}
+
+Em relação a erros semânticos, estes são muito fáceis de apresentar. Como a análise semântica é
+feita em ações semânticas, é trivial, com recurso à função \texttt{lexspan}, saber a localização de
+cada erro. No entanto, mesmo com o \emph{tracking} ativado, esta função não aparenta estar a ter o
+comportamento correto, visto que devolve comprimentos incorretos para símbolos não terminais, o que
+pode ser um possível \emph{bug} do \texttt{ply}. Por este motivo, as linhas vermelhas a indicar a
+localização de um erro podem estar incorretas em algumas mensagens de erro específicas. Por exemplo,
+na mensagem de erro abaixo, devido a esta limitação, o erro foi colocado na palavra reservada
+\texttt{IF}, e não na expressão errada:
+
+\begin{lstlisting}
+
+<stdin>:4:5: error: Expression in if-statement is not boolean
+     4 |     if 123 + 456 then
+             ^~
+\end{lstlisting}
+
+A um nível semântico, também foram implementados diversos avisos, que não impedem a compilação, mas
+que avisam o utilizador que pode ter cometido um erro indesejado. Segue-se o exemplo de um destes
+avisos:
+
+\lstset{
+    keywordstyle=\color{Gold2},
+    morekeywords={warning},
+    literate=
+        {~}{{{\color{Gold2}\~{}}}}1
+        {^}{{{\color{Gold2}\^{}}}}1
+        {ã}{{\~{a}}}1
+        {ç}{{\c{c}}}1
+}
+
+\begin{lstlisting}
+
+<stdin>:9:19: warning: Shadowing object with name 'bin'
+     9 | function BinToInt(bin: string): integer;
+                           ^~~
+\end{lstlisting}
+
+Durante a geração de código EWVM, alguns avisos também podem ocorrer. Estes devem-se a limitações da
+EWVM, que não permite a representação da totalidade do \emph{standard} Pascal. Segue-se o exemplo de
+um destes avisos:
+
+\begin{lstlisting}
+
+warning: Double quotes in string 'Hello, "quoted world"' will be removed in
+         EWVM output
+\end{lstlisting}
+
+Como se pode observar, durante a geração de código, já não há informação da posição de cada
+estrutura no código, pelo que não é possível apresentar a localização exata deste aviso.
 
 \section{Testes Realizados}
 
@@ -154,6 +298,14 @@ projeto foi concluído com sucesso.
     \bibitem{ewvm}
         S. Rocha, J. Ramalho. ``Virtual Machine EWVM.'' EWVM. Accessed: May 29, 2025. [Online.]
         Available: \url{https://ewvm.epl.di.uminho.pt/}
+    \bibitem{gcc-errors}
+        Free Software Foundation, ``GCC online documentation''. GCC, the GNU Compiler Collection.
+        Accessed: May 31, 2025. [Online.] Available:
+        \url{https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Message-Formatting-Options.html}
+    \bibitem{compilers-handwritten-parser}
+        P. Eaton, ``Parser generators vs. handwritten parsers: surveying major language
+        implementations in 2021.'' Phil Eaton. Accessed: May 31, 2025. [Online.] Available:
+        \url{https://notes.eatonphil.com/parser-generators-vs-handwritten-parsers-survey-2021.html}
     \bibitem{c}
         \emph{Information Technology -- Programming Languages -- C}, ISO 9899, 2024. [Online].
         Available: \url{https://www.iso.org/standard/82075.html}
