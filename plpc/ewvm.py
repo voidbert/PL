@@ -499,16 +499,25 @@ class _EWVMCodeGenerator:
         elif isinstance(statement[0], CaseStatement):
             self.program.append(Comment('CASE'))
             self.generate_expression_assembly(statement[0].expression)
+
             end_label = self.label_generator.new()
             no_match_label = self.label_generator.new()
             body_labels = [self.label_generator.new() for _ in statement[0].elements]
 
-            temp_offset = self.callable.body.variables[-1].scope_offset + 1 if self.callable and self.callable.body.variables else 0
+            if self.callable and self.callable.body.variables:
+                temp_offset = self.callable.body.variables[-1].scope_offset + 1
+            else:
+                temp_offset = 0
+
             self.program.append(EWVMStatement('STOREL', temp_offset))
 
             for i, element in enumerate(statement[0].elements):
                 self.program.append(EWVMStatement('PUSHL', temp_offset))
-                next_label = self.label_generator.new() if i < len(statement[0].elements) - 1 else no_match_label
+
+                if i < len(statement[0].elements) - 1:
+                    next_label = self.label_generator.new()
+                else:
+                    next_label = no_match_label
 
                 for j, label_value in enumerate(element.labels):
                     self.program.append(EWVMStatement('DUP', 1))
@@ -516,7 +525,7 @@ class _EWVMCodeGenerator:
                     self.program.append(EWVMStatement('EQUAL'))
 
                     self.program.append(EWVMStatement('JZ', next_label))
-                    self.program.append(EWVMStatement('POP', 1))
+                    self.program.append(EWVMStatement('POP', 1))  # pops comparison result
                     self.program.append(EWVMStatement('JUMP', body_labels[i]))
 
                     self.program.append(next_label)
@@ -524,16 +533,22 @@ class _EWVMCodeGenerator:
                         next_label = self.label_generator.new()
 
                 if i < len(statement[0].elements) - 1:
-                    self.program.append(EWVMStatement('POP', 1))
+                    self.program.append(EWVMStatement('POP', 1))  # pops expression copy
 
-            self.program.append(EWVMStatement('POP', 1))
+            self.program.append(EWVMStatement('POP', 1))  # pops expression copy
             self.program.append(EWVMStatement('ERR', 'Case expression did not match'))
 
             for i, element in enumerate(statement[0].elements):
                 self.program.append(body_labels[i])
-                body_statement = element.body[0][0] if isinstance(element.body, tuple) and \
-                                    isinstance(element.body[0], tuple) else element.body
-                self.generate_statement_assembly((body_statement, None))
+
+                if isinstance(element.body, tuple) and isinstance(element.body[0], tuple):
+                    body_statement = element.body[0][0]
+                else:
+                    body_statement = element.body
+
+                statement_tuple = (body_statement, None)
+                self.generate_statement_assembly(statement_tuple)
+
                 self.program.append(EWVMStatement('JUMP', end_label))
 
             self.program.append(end_label)
