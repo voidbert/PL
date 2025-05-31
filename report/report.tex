@@ -154,6 +154,73 @@ No anexo \ref{lexer-definition}, pode ser consultada a definição completa do a
 
 \section{Análise Sintática}
 
+Para a construção do analisador sintático, o \texttt{ply.yacc} \cite{ply} foi utilizado. A
+construção inicial da gramática de Pascal foi relativamente simples: partiu-se do símbolo não
+terminal \texttt{program}, que foi sendo decomposto recursivamente até se chegarem aos símbolos
+terminais. Durante este processo, foram identificadas estruturas iguais utilizadas em diferentes
+regras, que foram agrupadas no mesmo símbolo não terminal. A título de exemplo:
+
+\begin{itemize}
+    \item Um programa pode ser decomposto num cabeçalho de programa e num bloco;
+    \item Um bloco pode ser decomposto numa secção de declaração de constantes, numa secção de
+        declaração de tipos, numa secção de declaração de variáveis, \ldots;
+    \item Uma secção de declaração de constantes pode ser vazia, ou decomposta na palavra reservada
+        \texttt{CONST} e numa lista de declarações uma ou mais de constantes;
+    \item \ldots
+\end{itemize}
+
+Com este método \emph{top-down}, a construção da gramática foi simples. A única parte de
+complexidade superior foi a definição da gramática das expressões. Como os operadores unários
+\texttt{+} e \texttt{-} apenas podem ocorrer no início de uma expressão, foi necessária a distinção
+entre os símbolos não terminais para os primeiros termos e fatores, diferentes dos símbolos não
+terminais para os termos e fatores seguintes.
+
+A gramática inicialmente construída, apesar de ser simples, precisou de ser consideravelmente
+modificada para cumprir o \emph{standard} ISO. Muitos dos problemas corrigidos prendiam-se com
+a possibilidade / impossibilidade de, dependendo do contexto, ser possível ter \emph{trailing
+commas / semicolons}. Outra grande mudança feita foi a alteração da prioridade dos operadores
+binários nas expressões. Inicialmente, como acontece em outras linguagens, foi dada prioridade
+máxima aos operadores lógicos, que eram seguidos dos relacionais, que eram seguidos dos aritméticos
+para multiplicação e divisão, que, por fim, eram seguidos dos aritméticos para soma e subtração. No
+entanto, em Pascal, o operador \texttt{AND} deve ter tanta prioridade quanta a do \texttt{*}, e o
+\texttt{OR} tanta prioridade quanta a do \texttt{+}, o que exigiu alterações à gramática.
+
+Para melhorar o desempenho do compilador, seguindo as recomendações da documentação do
+\texttt{ply.yacc} \cite{ply}, as várias produções dos símbolos não terminais foram frequentemente
+colocadas em diferentes funções, para evitar \texttt{if}-\emph{statements} que procuram detetar a
+produção utilizada. Segue-se um exemplo desta técnica, a definição de uma lista de expressões
+separada por vírgulas:
+
+\begin{lstlisting}
+
+def p_expression_list_single(self, p: ply.yacc.YaccProduction) -> None:
+    '''
+    expression-list : expression
+    '''
+    p[0] = [p[1]]
+
+def p_expression_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+    '''
+    expression-list : expression-list ',' expression
+    '''
+    p[1].append(p[3])
+    p[0] = p[1]
+\end{lstlisting}
+
+No exemplo acima, observa-se também que, na gramática, foi utilizada recursividade à esquerda. Deste
+modo, a \emph{stack} do autómato LALR não precisa de aumentar significativamente para o
+processamento de estruturas recursivas, resultando num melhor desempenho e permitindo o
+processamento de estruturas recursivas de grande profundidade.
+
+O exemplo da definição de uma lista apresentado acima também revelou algumas limitações do
+\texttt{ply.yacc} encontradas na realização deste trabalho. O \texttt{ply.yacc} gera um
+\emph{parser} com base numa gramática na forma Backus-Naur (BNF) \cite{ply}. No entanto, teria sido
+mais simples definir a gramática se fosse possível fazê-lo na forma de Backus-Naur estendida, onde
+seria possível, sem a verbosidade acima, definir conceitos mais complexos como a ocorrência opcional
+de um símbolo, listas de ocorrências de um símbolo, \emph{etc.}. Assim, também seria possível
+remover muito código duplicado do \emph{parser} como, por exemplo, as várias declarações de listas
+de diferentes símbolos presentes na gramática.
+
 \section{Análise Semântica}
 
 \section{Geração de Código}
@@ -467,6 +534,220 @@ RANGE        = r'\.\.'
 
 ignore         =  ' \t\r'
 ignore_COMMENT = r'({|\(\*)((?!{|\(\*)(.|\n))*?(}|\*\))'
+\end{lstlisting}
+
+\subsection{Gramática}
+\label{lexer-definition}
+
+Segue-se a gramática utilizada no compilador, sem as produções utilizadas para deteção de erros:
+
+\lstset{
+    language={}
+}
+
+\begin{lstlisting}
+
+program : PROGRAM ID program-arguments ';' block '.'
+
+program-arguments :
+                  | '(' identifier-list ')'
+
+identifier-list : ID
+                | identifier-list ',' ID
+
+block : any-block-list begin-end-statement
+
+any-block-list :
+               | any-block-list-non-empty
+
+any-block-list-non-empty : any-block
+                         | any-block-list any-block
+
+any-block : label-block
+          | constant-block
+          | type-block
+          | variable-block
+          | callable-block
+
+label-block : LABEL label-list ';'
+
+label-list  : INTEGER
+            | label-list ',' INTEGER
+
+constant-block : CONST constant-definition-list
+
+constant-definition-list : constant-definition
+                         | constant-definition-list constant-definition
+
+constant-definition : ID '=' constant ';'
+
+constant : unsigned-constant
+         | signed-constant
+
+unsigned-constant : ID
+                  | unsigned-constant-literal
+
+unsigned-constant-literal : FLOAT
+                          | INTEGER
+                          | STRING
+
+signed-constant : '+' unsigned-constant
+                | '-' unsigned-constant
+
+type-block : TYPE type-definition-list
+
+type-definition-list : type-definition
+                     | type-definition-list type-definition
+
+type-definition : ID '=' type ';'
+
+type : type-id
+     | pointer-type
+     | enumerated-type
+     | structured-type
+     | range-type
+
+type-id : ID
+
+pointer-type : '^' type-id
+
+enumerated-type : '(' identifier-list ')'
+
+range-type : constant RANGE constant
+
+structured-type : unpacked-structured-type
+                | PACKED unpacked-structured-type
+
+unpacked-structured-type : array-type
+                         | record-type
+                         | set-type
+                         | file-type
+
+array-type : ARRAY '[' array-dimensions ']' OF type
+
+array-dimensions : range-type
+                 | array-dimensions ',' range-type
+
+record-type : RECORD ... END
+
+set-type : SET OF type
+
+file-type : FILE OF type
+
+variable-block : VAR variable-definition-list
+
+variable-definition-list : variable-definition
+                         | variable-definition-list variable-definition
+
+variable-definition : identifier-list ':' type ';'
+
+variable-usage : ID variable-index-list
+
+variable-index-list :
+                    | variable-indices
+
+variable-indices : variable-index
+                 | variable-indices variable-index
+
+variable-index : '[' expression-list ']'
+
+callable-block : callable-list ';'
+
+callable-list : callable-definition
+              | callable-list callable-definition
+
+callable-definition : procedure-heading ';' block
+                    | function-heading ';' block
+
+procedure-heading : PROCEDURE ID new-scope parameter-list
+
+function-heading : FUNCTION ID new-scope parameter-list ':' type-id
+
+new-scope :
+
+parameter-list :
+               | '(' parameter-list-non-empty ')'
+
+parameter-list-non-empty : parameter
+                         | parameter-list-non-empty ';' parameter
+
+parameter : identifier-list ':' type-id
+
+callable-call : ID callable-arguments
+
+callable-arguments :
+                   | '(' expression-list ')'
+
+expression : non-relational-expression
+           | non-relational-expression relational-operator non-relational-expression
+
+non-relational-expression : first-term
+                          | non-relational-expression adding-operator term
+
+first-term : first-factor
+           | first-term multiplying-operator factor
+
+first-factor : '+' factor
+             | '-' factor
+             | factor
+
+term : factor
+     | term multiplying-operator factor
+
+factor : '(' expression ')'
+       | NIL
+       | NOT factor
+       | unsigned-constant-literal
+       | ID variable-index-list
+       | ID callable-arguments
+
+relational-operator : '='
+                    | DIFFERENT
+                    | '<'
+                    | '>'
+                    | LE
+                    | GE
+                    | IN
+
+adding-operator : '+'
+                | '-'
+                | OR
+
+multiplying-operator : '*'
+                     | '/'
+                     | DIV
+                     | MOD
+                     | AND
+
+expression-list : expression
+                | expression-list ',' expression
+
+begin-end-statement : BEGIN statement-list END
+
+statement-list : statement
+               | statement-list ';' statement
+
+statement : unlabeled-statement
+          | INTEGER ':' unlabeled-statement
+
+unlabeled-statement :
+                    | variable-usage ASSIGN expression
+                    | variable-usage '=' expression
+                    | GOTO INTEGER
+                    | callable-call
+                    | begin-end-statement
+                    | IF expression THEN statement if-statement-else
+                    | REPEAT statement-list UNTIL expression
+                    | WHILE expression DO statement
+                    | FOR ID ASSIGN expression TO     expression DO statement
+                    | FOR ID ASSIGN expression DOWNTO expression DO statement
+                    | WITH variable-list DO statement
+
+if-statement-else :
+                  | ELSE statement
+
+variable-list : variable-usage
+              | variable-list ',' variable-usage
 \end{lstlisting}
 
 \end{document}
