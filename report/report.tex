@@ -13,7 +13,7 @@
 \chardef\_=`_
 
 \lstdefinestyle{codestyle}{
-    language=pascal,
+    language=python,
     commentstyle=\color{teal},
     keywordstyle=\color{blue},
     numberstyle=\ttfamily\color{gray},
@@ -87,6 +87,70 @@
 \section{Arquitetura}
 
 \section{Análise Léxica}
+
+A análise léxica é a primeira fase de compilação, onde o código fonte é divido em lexemas. Para
+implementar o analisador léxico, o \texttt{ply.lex} foi utilizado \cite{ply}. Com esta ferramenta,
+basta definir o formato de cada tipo de lexema com uma expressão regular, e definir a prioridade do
+reconhecimento destes lexemas.
+
+Definir as expressões regulares de cada tipo de lexema foi trivial, mas alguns cuidados foram
+necessários. Em primeiro lugar, a \emph{flag} \texttt{re.IGNORECASE} foi utilizada no analisador
+léxico. Como Pascal é uma linguagem \emph{case-insensitive}, esta \emph{flag} permite que não seja
+necessário, em todas as expressões regulares, utilizar construções RegEx como \texttt{(?i)}.
+Ademais, todas as palavras reservadas e constantes numéricas são terminadas por uma
+\emph{word boundary} (ex: \verb|PROGRAM\b|), para exigir a existência de caracteres não
+alfanuméricos a separar estes \emph{tokens}. Deste modo, \emph{inputs} como \texttt{FORFOR} são
+reconhecidos com um identificador, em vez de duas palavras reservadas \texttt{FOR}.
+
+Depois, procedeu-se à definição das prioridades de reconhecimento dos vários lexemas. Para tal,
+muitos dos tipos de lexema foram definidos na forma de função, para a sua ordem de reconhecimento
+ser a ordem de declaração das funções. Segue-se, abaixo, um exemplo de uma destas declarações:
+
+\begin{lstlisting}
+
+def t_INTEGER(self, t: ply.lex.LexToken) -> ply.lex.LexToken:
+    r'[0-9]+\b'
+    t.value = int(t.value)
+    return t
+\end{lstlisting}
+
+Foi necessário garantir que lexemas cujo valor poderia constituir um prefixo de um lexema de outro
+tipo eram declarados depois desse outro tipo de lexema. Logo, todas as palavras reservadas foram
+declaradas antes da declaração de um identificador, e a definição de uma constante real precede a de
+uma constante inteira. Foi possível, devido à inexistência de conflitos, definir alguns lexemas
+utilizando constantes em vez de funções (ex: \verb|t_RANGE = r'\.\.'|). Note-se que estes lexemas,
+incluindo o exemplo \texttt{RANGE}, têm prioridade de reconhecimento sobre os literais \cite{ply}.
+Logo, não haverá conflitos entre os lexemas \texttt{'..'} e \texttt{'.'}.
+
+Por último, é necessário manipular alguns lexemas após a sua deteção. Por exemplo, constantes reais
+e inteiras devem ser convertidas para \texttt{float}s e para \texttt{int}s, respetivamente. Ademais,
+é necessário processar constantes textuais para remoção das plicas, e para transformação de
+sequências de duas plicas no seu conteúdo em apenas uma (é assim que plicas são escapadas em
+Pascal). Estas transformações são feitas em funções como a apresentada acima.
+
+Um detalhe de implementação a mencionar é que o analisador léxico foi implementado como uma classe
+Python, sendo este o motivo para a função apresentada acima ter \texttt{self} como parâmetro. Deste
+modo, é possível criar vários analisadores léxicos num único processo, sem qualquer estado global, o
+que é essencial para a implementação de testes unitários, nos quais se entrará em mais detalhe
+posteriormente neste documento.
+
+Para o desenvolvimento do analisador léxico, a leitura do \emph{standard} ISO que define Pascal
+ajudou apenas a limar algumas arestas. A título de exemplo, permitiu corrigir a definição de
+comentário, visto que em Pascal, um comentário começado por \texttt{(*} pode terminar em
+\texttt{\}}, ou um comentário começado por \texttt{\{} pode acabar em \texttt{*)}. Ademais, o
+\emph{standard} ensinou o grupo de trabalho sobre caracteres alternativos,
+\footnote{
+    Devido aos \emph{character-sets} limitados de alguns computadores quando Pascal foi
+    desenvolvido, a linguagem permite substituir sequências de alguns caráteres por outros. Por
+    exemplo: \texttt{'(.'} $\rightarrow$ \texttt{'['}.
+}
+que foram implementados, bem como alguns tipos de
+\emph{statements} menos conhecidos (como \texttt{WITH}), que utilizavam lexemas que também foram
+definidos. Por último, a leitura do \emph{standard} também fez com que \texttt{NIL} fosse
+considerado um lexema, em vez de um identificador pré-definido na tabela de símbolos (como, por
+exemplo, \texttt{maxint}).
+
+No anexo \ref{lexer-definition}, pode ser consultada a definição completa do analisador léxico.
 
 \section{Análise Sintática}
 
@@ -194,8 +258,6 @@ avisos:
     literate=
         {~}{{{\color{Gold2}\~{}}}}1
         {^}{{{\color{Gold2}\^{}}}}1
-        {ã}{{\~{a}}}1
-        {ç}{{\c{c}}}1
 }
 
 \begin{lstlisting}
@@ -298,6 +360,9 @@ projeto foi concluído com sucesso.
     \bibitem{ewvm}
         S. Rocha, J. Ramalho. ``Virtual Machine EWVM.'' EWVM. Accessed: May 29, 2025. [Online.]
         Available: \url{https://ewvm.epl.di.uminho.pt/}
+    \bibitem{ply}
+        D. Beazley, ``PLY (Python Lex-Yacc).'' Dabeaz. Accessed: May 29, 2025. [Online.] Available:
+        \url{https://www.dabeaz.com/ply/index.html}
     \bibitem{gcc-errors}
         Free Software Foundation, ``GCC online documentation''. GCC, the GNU Compiler Collection.
         Accessed: May 31, 2025. [Online.] Available:
@@ -317,5 +382,91 @@ projeto foi concluído com sucesso.
         \url{https://mypy-lang.org/}
 \end{thebibliography}
 \endgroup
+
+\section{Anexos}
+
+\subsection{Lexemas}
+\label{lexer-definition}
+
+Segue-se a definição dos lexemas por ordem de prioridade de reconhecimento. Asteriscos azuis
+sinalizam que o lexema sofre alguma forma de transformação antes de ser passado ao analisador
+sintático.
+
+\lstset{
+    language=python,
+    keywordstyle=\color{red},
+    literate=
+        {ACTION}{{{\color{blue}*{}}}}1
+}
+
+\begin{lstlisting}
+
+PROGRAM      = r'PROGRAM\b'
+BEGIN        = r'BEGIN\b'
+END          = r'END\b'
+LABEL        = r'LABEL\b'
+CONST        = r'CONST\b'
+TYPE         = r'TYPE\b'
+VAR          = r'VAR\b'
+ARRAY        = r'ARRAY\b'
+PACKED       = r'PACKED\b'
+SET          = r'SET\b'
+FILE         = r'FILE\b'
+OF           = r'OF\b'
+RECORD       = r'RECORD\b'
+FUNCTION     = r'FUNCTION\b'
+PROCEDURE    = r'PROCEDURE\b'
+IF           = r'IF\b'
+THEN         = r'THEN\b'
+ELSE         = r'ELSE\b'
+FOR          = r'FOR\b'
+TO           = r'TO\b'
+DOWNTO       = r'DOWNTO\b'
+DO           = r'DO\b'
+WHILE        = r'WHILE\b'
+REPEAT       = r'REPEAT\b'
+UNTIL        = r'UNTIL\b'
+CASE         = r'CASE\b'
+GOTO         = r'GOTO\b'
+WITH         = r'WITH\b'
+AND          = r'AND\b'
+OR           = r'OR\b'
+NOT          = r'NOT\b'
+IN           = r'IN\b'
+DIV          = r'DIV\b'
+MOD          = r'MOD\b'
+NUL          = r'NIL\b'
+ID           = r'[a-z][a-z0-9]*'
+FLOAT        = r'[0-9]+(\.[0-9]+e(\+|\-)?[0-9]+|\.[0-9]+|e(\+|\-)?[0-9]+)\b' ACTION
+INTEGER      = r'[0-9]+\b' ACTION
+STRING       = r'\'((?:\'\'|[^\'])*)\'' ACTION
+ALT_CARET    = r'@' ACTION
+ALT_LBRACKET = r'\(\.' ACTION
+ALT_RBRACKET = r'\.\)' ACTION
+DIFFERENT    = r'<>'
+LE           = r'<='
+GE           = r'>='
+ASSIGN       = r':='
+RANGE        = r'\.\.'
+'.'          = r'\.'
+';'          = r';'
+':'          = r':'
+'('          = r'\('
+','          = r','
+')'          = r'\)'
+'<'          = r'<'
+'>'          = r'>'
+'='          = r'='
+'+'          = r'\+'
+'-'          = r'-'
+'*'          = r'\*'
+'/'          = r'/'
+'['          = r'\['
+']'          = r'\]'
+'^'          = r'\^'
+
+ignore         =  ' \t\r'
+ignore_COMMENT = r'({|\(\*)((?!{|\(\*)(.|\n))*?(}|\*\))'
+\end{lstlisting}
 
 \end{document}
