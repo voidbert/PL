@@ -94,7 +94,7 @@ class SymbolTable:
         return None, False
 
     def query_label(self,
-                    identifier: str,
+                    identifier: int,
                     lexspan: tuple[int, int] = (0, 0),
                     error: bool = False) -> LabelDefinition:
 
