@@ -1235,11 +1235,6 @@ class _Parser:
             else:
                 p[0] = (p[3], None)
 
-    def p_unlabeled_statement_error(self, p: ply.yacc.YaccProduction) -> None:
-        '''
-        unlabeled-statement : error
-        '''
-
     def p_unlabeled_statement_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
         unlabeled-statement :
