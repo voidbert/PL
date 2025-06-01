@@ -19,10 +19,11 @@
 import argparse
 import sys
 
-from .lexer import LexerError
-from .parser import ParserError, create_parser
 from .ewvm import export_assembly, generate_ewvm_code, remove_ewvm_comments
 from .ewvmpeephole import apply_ewvm_peephole_optimizations
+from .lexer import LexerError
+from .optimizer import optimize_ast
+from .parser import ParserError, create_parser
 
 def main() -> None:
     argument_parser = argparse.ArgumentParser(description='Compile Pascal for the EWVM.')
@@ -47,6 +48,10 @@ def main() -> None:
 
         parser = create_parser(human_readable_filename)
         ast = parser.parse(source)
+
+        if args.O:
+            optimize_ast(ast)
+
         assembly = generate_ewvm_code(ast)
 
         if not args.g:
