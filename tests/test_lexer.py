@@ -267,6 +267,14 @@ def test_double_keyword_2() -> list[SimpleToken]:
 def test_double_keyword_3() -> list[SimpleToken]:
     return [('IF', 'IF'), ('IF', 'IF')]
 
+@successful_test('If9')
+def test_keyword_followed_by_digit() -> list[SimpleToken]:
+    return [('ID', 'If9')]
+
+@failing_test('9If')
+def test_keyword_preceded_by_digit() -> None:
+    pass
+
 @failing_test('123variable')
 def test_id_prefixed_by_digit() -> None:
     pass

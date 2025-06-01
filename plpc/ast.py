@@ -105,17 +105,21 @@ class CallableCall:
     callable: CallableDefinition
     arguments: list[Expression]
 
+BinaryOperator = Literal['+', '-', '*', '/', 'div', 'mod',
+                         'and', 'or', 'in',
+                         '=', '<>', '<', '>', '<=', '>=']
+
 @dataclass
 class BinaryOperation:
-    operator: Literal['+', '-', '*', '/', 'div', 'mod',
-                      'and', 'or', 'in',
-                      '=', '<>', '<', '>', '<=', '>=']
+    operator: BinaryOperator
     left: Expression
     right: Expression
 
+UnaryOperator = Literal['+', '-', 'not']
+
 @dataclass
 class UnaryOperation:
-    operator: Literal['+', '-', 'not']
+    operator: UnaryOperator
     sub: Expression
 
 Expression = tuple[

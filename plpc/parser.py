@@ -479,9 +479,12 @@ class _Parser:
                 self.print_error('Types of elements in range type are different',
                                  p.lexspan(0)[0],
                                  p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+
+                p[0] = RangeType(1, 1, BuiltInType.INTEGER)
                 return
         except TypeCheckerError:
             self.has_errors = True
+            p[0] = RangeType(1, 1, BuiltInType.INTEGER)
             return
 
         try:
@@ -491,12 +494,16 @@ class _Parser:
             self.print_error('Type of elements in range type is not ordinal',
                              p.lexspan(0)[0],
                              p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+
+            p[0] = RangeType(1, 1, BuiltInType.INTEGER)
             return
 
         if value1 > value2:
             self.print_error('Range\'s upper bound is lower than its lower bound',
                              p.lexspan(0)[0],
                              p.lexspan(0)[1] - p.lexspan(0)[0] + 1)
+
+            p[0] = RangeType(1, 1, BuiltInType.INTEGER)
             return
 
         p[0] = RangeType(p[1], p[3], self.type_checker.get_constant_type(p[1]))
@@ -867,13 +874,18 @@ class _Parser:
                     )
 
                 for i, (left, right) in enumerate(zip(definition.parameters, p[2][1])):
-                    if right and not self.type_checker.can_assign(left.variable_type, right[1]):
-                        ordinal = ordinals.get(str(i + 1)[-1], 'th')
-                        self.print_error(
-                            f'Type mismatch in {i + 1}{ordinal} argument',
-                            p.lexspan(1)[0],
-                            len(p[1])
-                        )
+                    if right:
+                        if not self.type_checker.can_assign(left.variable_type, right[1]):
+                            ordinal = ordinals.get(str(i + 1)[-1], 'th')
+                            self.print_error(
+                                f'Type mismatch in {i + 1}{ordinal} argument',
+                                p.lexspan(1)[0],
+                                len(p[1])
+                            )
+                        elif left.variable_type == BuiltInType.STRING and \
+                            right[1] == BuiltInType.CHAR:
+
+                            p[2][1][i] = (p[2][1][i][0], BuiltInType.STRING)
             elif definition.name in ['writeln', 'write']:
                 for i, parameter in enumerate(p[2][1]):
                     if parameter and isinstance(parameter[1], ArrayType):
@@ -1173,24 +1185,22 @@ class _Parser:
         '''
         statement-list : statement
         '''
-        if p[1] is not None:
-            p[0] = [p[1]]
-        else:
-            p[0] = []
+        p[0] = [p[1]]
 
     def p_statement_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
         '''
         statement-list : statement-list ';' statement
         '''
-        if p[3] is not None:
-            p[1].append(p[3])
+        p[1].append(p[3])
         p[0] = p[1]
 
     def p_statement_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
         statement : unlabeled-statement
         '''
-        if p[1] is not None:
+        if p[1] is None:
+            p[0] = ([], None)
+        else:
             p[0] = (p[1], None)
 
     def p_statement_labeled(self, p: ply.yacc.YaccProduction) -> None:
@@ -1214,17 +1224,16 @@ class _Parser:
                     len(str(p[1]))
                 )
 
-            if p[3] is not None:
+            if p[3] is None:
+                p[0] = ([], label)
+            else:
                 p[0] = (p[3], label)
         except SymbolTableError:
             self.has_errors = True
-            if p[3] is not None:
+            if p[3] is None:
+                p[0] = ([], label)
+            else:
                 p[0] = (p[3], None)
-
-    def p_unlabeled_statement_error(self, p: ply.yacc.YaccProduction) -> None:
-        '''
-        unlabeled-statement : error
-        '''
 
     def p_unlabeled_statement_empty(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -1236,22 +1245,24 @@ class _Parser:
         unlabeled-statement : variable-usage ASSIGN expression
         '''
 
-        if p[1] is not None and p[3] is not None and \
-            not self.type_checker.can_assign(p[1].type, p[3][1]):
+        if p[1] is not None and p[3] is not None:
+            if p[1].variable.variable_type == BuiltInType.STRING and p[3][1] == BuiltInType.CHAR:
+                p[3] = (p[3][0], BuiltInType.STRING)
 
-            self.print_error(
-                'Assignment is impossible due to type mismatch',
-                p.lexspan(2)[0],
-                len(':=')
-            )
+            if not self.type_checker.can_assign(p[1].type, p[3][1]):
+                self.print_error(
+                    'Assignment is impossible due to type mismatch',
+                    p.lexspan(2)[0],
+                    len(':=')
+                )
 
-        try:
-            self.type_checker.fail_on_string_indexation(
-                p[1],
-                (p.lexspan(2)[0], p.lexspan(2)[0] + 1)
-            )
-        except TypeCheckerError:
-            self.has_errors = True
+            try:
+                self.type_checker.fail_on_string_indexation(
+                    p[1],
+                    (p.lexspan(2)[0], p.lexspan(2)[0] + 1)
+                )
+            except TypeCheckerError:
+                self.has_errors = True
 
         p[0] = AssignStatement(p[1], p[3])
 
@@ -1305,9 +1316,9 @@ class _Parser:
             self.print_error(
                 'Expression in if-statement is not boolean',
                 p.lexspan(1)[0],
-                p.lexspan(1)[1] - p.lexspan(1)[0] + 1
+                len('IF')
             )
-            self.has_errors = True
+            p[0] = []
 
         p[0] = IfStatement(p[2], p[4], p[5])
 
@@ -1334,6 +1345,7 @@ class _Parser:
                 p.lexspan(3)[0],
                 len('UNTIL')
             )
+
         p[0] = RepeatStatement(p[4], p[2])
 
     def p_unlabeled_statement_while(self, p: ply.yacc.YaccProduction) -> None:

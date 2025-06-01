@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 from itertools import chain
-from typing import get_args
+from typing import Any, get_args
 
 # pylint: disable-next=wildcard-import,unused-wildcard-import
 from .ast import *
@@ -89,6 +89,12 @@ class EWVMStatement:
         arguments_str = ' '.join(stringize_argument(argument) for argument in self.arguments)
         return f'{indent}{self.instruction} {arguments_str}'
 
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, EWVMStatement):
+            return False
+
+        return self.instruction == other.instruction and self.arguments == other.arguments
+
 class Comment:
     content: str
 
@@ -100,8 +106,11 @@ class Comment:
 
 EWVMProgram = list[Label | EWVMStatement | Comment]
 
-def export_assembly(program: EWVMProgram, comments: bool = True) -> str:
-    return '\n'.join(str(e) for e in program if (not isinstance(e, Comment) or comments))
+def export_assembly(program: EWVMProgram) -> str:
+    return '\n'.join(str(e) for e in program)
+
+def remove_ewvm_comments(program: EWVMProgram) -> EWVMProgram:
+    return [e for e in program if not isinstance(e, Comment)]
 
 class LabelGenerator:
     def __init__(self, call: None | CallableDefinition) -> None:
@@ -203,8 +212,9 @@ class _EWVMCodeGenerator:
                     end = self.type_checker.get_constant_ordinal_value(range_type.end)
                     element_size *= end - start + 1
 
-                self.program.append(EWVMStatement('PUSHI', element_size))
-                self.program.append(EWVMStatement('MUL'))
+                if element_size != 1:
+                    self.program.append(EWVMStatement('PUSHI', element_size))
+                    self.program.append(EWVMStatement('MUL'))
                 self.program.append(EWVMStatement('PADD'))
 
                 current_type = self.type_checker.type_after_indexation(
@@ -232,7 +242,13 @@ class _EWVMCodeGenerator:
 
     def generate_expression_assembly(self, expression: Expression) -> None:
         if isinstance(expression[0], get_args(ConstantValue)):
-            self.generate_constant_assembly(expression[0])
+            if isinstance(expression[0], str) and \
+                len(expression[0]) == 1 and \
+                expression[1] == BuiltInType.STRING:
+
+                self.program.append(EWVMStatement('PUSHS', expression[0]))
+            else:
+                self.generate_constant_assembly(expression[0])
         elif isinstance(expression[0], VariableUsage):
             self.generate_variable_usage_assembly(expression[0], False)
         elif isinstance(expression[0], CallableCall):
@@ -256,12 +272,7 @@ class _EWVMCodeGenerator:
 
         elif isinstance(expression[0], BinaryOperation):
             self.generate_expression_assembly(expression[0].left)
-            if expression[0].left[1] == BuiltInType.INTEGER and expression[1] == BuiltInType.REAL:
-                self.program.append(EWVMStatement('ITOF'))
-
             self.generate_expression_assembly(expression[0].right)
-            if expression[0].right[1] == BuiltInType.INTEGER and expression[1] == BuiltInType.REAL:
-                self.program.append(EWVMStatement('ITOF'))
 
             instruction: str
             if expression[0].operator == '+':

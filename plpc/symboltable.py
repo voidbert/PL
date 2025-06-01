@@ -56,7 +56,9 @@ class SymbolTable:
                 # Non-standard
                 'string': TypeDefinition('char', BuiltInType.STRING),
                 'length': CallableDefinition('length',
-                                             None,
+                                             [
+                                                VariableDefinition('str', BuiltInType.STRING, True)
+                                             ],
                                              VariableDefinition(
                                                 'length', BuiltInType.INTEGER, True),
                                              empty_body),

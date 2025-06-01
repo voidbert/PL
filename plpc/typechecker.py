@@ -185,7 +185,7 @@ class TypeChecker:
             if current_type == BuiltInType.STRING:
                 print_error(self.file_path,
                             self.lexer.lexdata,
-                            'Invalid assignement to string',
+                            'Invalid assignement to string character',
                             self.lexer.lineno,
                             lexspan[0],
                             lexspan[1] - lexspan[0] + 1)
