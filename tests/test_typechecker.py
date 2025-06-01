@@ -1,0 +1,152 @@
+# -------------------------------------------- LICENSE --------------------------------------------
+#
+# Copyright 2025 Humberto Gomes, José Lopes, José Matos
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# -------------------------------------------------------------------------------------------------
+
+import sys
+import inspect
+import functools
+from typing import Callable, Any, Dict, List, Tuple, Union
+
+import ply.lex
+from plpc.typechecker import (
+    TypeChecker,
+    TypeCheckerError,
+    BuiltInType,
+    EnumeratedTypeConstantValue,
+    TypeDefinition,
+)
+
+class DummyLexer:
+    def __init__(self):
+        self.lexdata = ""
+
+    def input(self, text: str) -> None:
+        pass
+
+    def token(self):
+        return None
+
+    @property
+    def lineno(self) -> int:
+        return 0
+
+    @property
+    def lexpos(self) -> int:
+        return 0
+
+ExpectedMapping = Dict[
+    str,
+    List[ Tuple[ Tuple[Any, ...], Union[Any, type] ] ]
+]
+
+def successful_test() -> \
+                   Callable[[Callable[[], ExpectedMapping]], Callable[[], None]]:
+    def decorator(test_fn: Callable[[], ExpectedMapping]) -> Callable[[], None]:
+        @functools.wraps(test_fn)
+        def wrapper() -> None:
+            tc = TypeChecker("<test-input>", DummyLexer())
+
+            expected_map: ExpectedMapping = test_fn()
+
+            for method_name, test_list in expected_map.items():
+                if not hasattr(tc, method_name):
+                    raise AssertionError(
+                        f"TypeChecker has no method '{method_name}'"
+                    )
+                method = getattr(tc, method_name)
+
+                for args_tuple, expected_or_exc in test_list:
+                    if not isinstance(args_tuple, tuple):
+                        raise AssertionError(
+                            f"In test '{test_fn.__name__}', for method '{method_name}', "
+                            f"expected args to be a tuple, got {type(args_tuple).__name__}"
+                        )
+
+                    if isinstance(expected_or_exc, type) and issubclass(expected_or_exc, Exception):
+                        try:
+                            _ = method(*args_tuple)
+                            raise AssertionError(
+                                f"In test '{test_fn.__name__}': "
+                                f"Expected {method_name}{args_tuple} to raise "
+                                f"{expected_or_exc.__name__}, but it returned successfully."
+                            )
+                        except expected_or_exc:
+                            pass
+                        except Exception as other_exc:
+                            raise AssertionError(
+                                f"In test '{test_fn.__name__}': Expected {method_name}{args_tuple} "
+                                f"to raise {expected_or_exc.__name__}, but it raised "
+                                f"{type(other_exc).__name__} instead."
+                            ) from other_exc
+
+                    else:
+                        try:
+                            result = method(*args_tuple)
+                        except Exception as e:
+                            raise AssertionError(
+                                f"In test '{test_fn.__name__}': Calling {method_name}{args_tuple} "
+                                f"raised {type(e).__name__}, but expected {expected_or_exc!r}."
+                            ) from e
+
+                        if result != expected_or_exc:
+                            raise AssertionError(
+                                f"In test '{test_fn.__name__}': {method_name}{args_tuple} returned "
+                                f"{result!r}, but expected {expected_or_exc!r}."
+                            )
+
+        return wrapper
+
+    return decorator
+
+@successful_test()
+def test_constant_type():
+    enum_const = EnumeratedTypeConstantValue(
+        name="EVEN",
+        value=2,
+        constant_type=TypeDefinition("MyEnum", BuiltInType.INTEGER)
+    )
+
+    return {
+        "get_constant_type": [
+            ( (True,), BuiltInType.BOOLEAN ),
+            ( (42,), BuiltInType.INTEGER ),
+            ( (3.14,), BuiltInType.REAL ),
+            ( ("Z",), BuiltInType.CHAR ),
+            ( ("Hi",), BuiltInType.STRING ),
+            ( (enum_const,), BuiltInType.INTEGER ),
+            ( ([],), TypeCheckerError ),
+        ],
+    }
+
+@successful_test()
+def test_constant_ordinal_value():
+    enum_const = EnumeratedTypeConstantValue(
+        name="EVEN",
+        value=2,
+        constant_type=TypeDefinition("MyEnum", BuiltInType.INTEGER)
+    )
+
+    return {
+        "get_constant_ordinal_value": [
+            ( (False,), 0 ),
+            ( (True,), 1 ),
+            ( (13,), 13 ),
+            ( ('C',), ord('C') ),
+            ( (enum_const,), 2 ),
+            ( ((3.14,),), TypeCheckerError ),
+        ],
+    }
