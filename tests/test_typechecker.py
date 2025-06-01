@@ -32,6 +32,8 @@ from plpc.typechecker import (
     RangeType,
 )
 
+# ------------------------------------------ EASE OF USE ------------------------------------------
+
 class DummyLexer:
     def __init__(self) -> None:
         self.lexdata = ""
@@ -99,6 +101,8 @@ def successful_test() -> Callable[[Callable[[], ExpectedMapping]], Callable[[], 
 
     return decorator
 
+# --------------------------------------------- TESTS ---------------------------------------------
+
 @successful_test()
 def test_constant_type() -> ExpectedMapping:
     enum_const = EnumeratedTypeConstantValue(
@@ -143,6 +147,8 @@ def test_unary_operation_type() -> ExpectedMapping:
     u_int = UnaryOperation("+", ( (7, BuiltInType.INTEGER) ))
     u_real = UnaryOperation("-", ( (2.5, BuiltInType.REAL) ))
     u_bool = UnaryOperation("not", ( (False, BuiltInType.BOOLEAN) ))
+
+    # invalid operations
     u_bad1 = UnaryOperation("+", ( (True, BuiltInType.BOOLEAN) ))
     u_bad2 = UnaryOperation("not", ( (5, BuiltInType.INTEGER) ))
 
@@ -165,7 +171,7 @@ def test_binary_operation_type() -> ExpectedMapping:
     b5 = BinaryOperation("and", (True, BuiltInType.BOOLEAN), (False, BuiltInType.BOOLEAN))
     b6 = BinaryOperation("=", (3, BuiltInType.INTEGER), (3, BuiltInType.INTEGER))
 
-    # invalid combinations
+    # invalid operations
     b_bad1 = BinaryOperation("+", (3, BuiltInType.INTEGER), (True, BuiltInType.BOOLEAN))
     b_bad2 = BinaryOperation("or", (1, BuiltInType.INTEGER), (0, BuiltInType.INTEGER))
     b_bad3 = BinaryOperation("<", (1, BuiltInType.INTEGER), (2.5, BuiltInType.REAL))
