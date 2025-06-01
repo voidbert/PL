@@ -8,6 +8,7 @@
 \usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{listings}
+\usepackage{longtable}
 \usepackage{setspace}
 \usepackage[x11names]{xcolor}
 
@@ -15,6 +16,7 @@
 
 \lstdefinestyle{codestyle}{
     language=python,
+    backgroundcolor =\color{Azure2},
     commentstyle=\color{teal},
     keywordstyle=\color{blue},
     numberstyle=\ttfamily\color{gray},
@@ -307,20 +309,22 @@ var
     x, y: integer;
 
 procedure exampleProcedure(z: integer);
+var
+    arr: array [1..10] of integer;
 begin
     ;
 end;
 
 begin
     y := y + 1;
-end
+end.
 \end{lstlisting}
 
 No corpo do procedimento, o estado da tabela de símbolos será o seguinte:
 
 \begin{tabular}{|>{\centering\arraybackslash}p{\textwidth}|}
     \hline
-    \texttt{\{ 'z': VariableDefinition(...) \}} \\
+    \texttt{\{ 'z': VariableDefinition(...), 'arr': VariableDefinition(...) \}} \\
     \hline
     \texttt{\{ 'x': VariableDefinition(...), 'y': VariableDefinition(...) \}} \\
     \hline
@@ -361,6 +365,108 @@ Python com ferramentas como o \texttt{mypy} \cite{mypy}, pelo que foi também de
 manualmente, a correção de tipos do código Python nas produções.
 
 \section{Geração de Código}
+
+Antes de começar a geração de código, foi necessária a criação de algumas ferramentas para ser
+possível fazê-la corretamente e permitindo a implementação posterior de otimizações \emph{peephole}
+(ver \ref{peephole}). Por esta razão, a geração de código não é feita diretamente para uma
+\emph{string}, foi necessário construir uma representação intermédia do código EWVM, com tipos de
+dados para a representação de \emph{labels}, de instruções, e de comentários. Ademais, também antes
+da geração de código em si, foi necessário criar um mecanismo para geração de novas \emph{labels}:
+cada \emph{scope} tem o seu gerador de \emph{labels}, que as gera com base num contador simples.
+Para não haver conflitos de nome entre \emph{labels} de diferentes \emph{scopes}, todas as
+\emph{labels} são prefixadas pelo nome do seu \emph{scope}.
+
+O facto da máquina alvo ser uma \emph{stack machine} simplificou consideravelmente o processo de
+geração de código, visto que permitia a fácil concatenação de diferentes partes do programa,
+exigindo apenas que fosse assegurado que cada parte do programa deixava a \emph{stack} num estado
+válido para a parte seguinte. Também não foi necessário a implementação de qualquer mecanismo de
+alocação de registos, simplificando assim a geração de código.
+
+Antes de se começar a gerar qualquer código, foi necessário definir a organização das variáveis na
+pilha e a \emph{calling convention} a utilizar. Foi decido que os \emph{arrays} seriam alocados na
+\emph{heap}, assim simplificando a geração de código, visto que qualquer variável ocuparia uma
+posição na pilha da máquina virtual. Depois, decidiu-se que as variáveis de um \emph{scope} seriam
+colocadas na pilha depois do seu \emph{frame pointer}, pela ordem em que são declaradas. O mesmo
+não é verdade para o valor de retorno e os argumentos de uma função ou procedimento, que são
+colocados, nesta ordem, antes do \emph{frame pointer}, permitindo a sua colocação na pilha antes da
+execução da instrução \texttt{CALL}. Por exemplo, no procedimento \texttt{exampleProcedure} do
+programa previamente apresentado, o estado da pilha será o seguinte, onde o traço horizontal duplo
+representa o \emph{frame pointer}:
+
+\begin{center}
+    \begin{tabular}{|>{\centering\arraybackslash}p{0.2\textwidth}|}
+        \hline arr \\
+        \hline \hline z \\
+        \hline y \\
+        \hline x \\
+        \hline
+    \end{tabular}
+\end{center}
+
+Com esta convenção definida, a geração de código foi trivial, e implementada de um modo
+\emph{top-down}:
+
+\begin{itemize}
+    \item Para gerar o código do programa, gera-se, em primeiro lugar, o código do seu bloco
+        principal, e só depois o código dos procedimentos e das funções.
+
+    \item O bloco do programa é precedido pela instrução \texttt{START} e terminado pela instrução
+        \texttt{STOP}, enquanto que um bloco de uma função / de um procedimento começa com a sua
+        \emph{label}, e termina com a instrução \texttt{RETURN}. No conteúdo do bloco, gera-se o
+        código para as declarações das variáveis, e só depois para os \emph{statements}.
+
+    \item Declarações de variáveis são baseadas na geração de constantes: para gerar variáveis
+        escalares e \emph{strings}, basta colocar na \emph{stack} o valor por omissão dessa
+        variável. Variáveis que são \emph{arrays} já são mais complexas, exigindo a alocação de
+        memória na \emph{heap} (com a instrução \texttt{ALLOC}) e a inicialização da memória alocada
+        com um ciclo. No fim do seu \emph{scope}, para eliminar os \emph{buffers} alocados na
+        \emph{heap}, a instrução \texttt{POPST} é utilizada tantas vezes quantas há variáveis do
+        tipo \texttt{array} no \emph{scope}.
+
+    \item Constantes são geradas com uma instrução da forma \texttt{PUSH(I|F|S)}, conforme o seu
+        tipo.
+
+    \item Diferentes tipos de \emph{statements} são gerados de diferente modo, e a geração do código
+        de cada \emph{statement} pode ser consultada no anexo \ref{statements-codegen}.
+
+    \item Para gerar chamadas a funções e procedimentos, os valores das expressões dos argumentos
+        são colocados na pilha, e a função / procedimento é depois chamado (com as instruções
+        \texttt{PUSHA} e \texttt{CALL}). Quando o controlo de fluxo é devolvido, é necessário
+        executar a instrução \texttt{POP N} para remover os elementos colocados na pilha pela
+        função / pelo procedimento. O número de elementos é a soma do número de parâmetros com o
+        número de variáveis do objeto chamado. No caso da invocação de uma função, sobrará sempre
+        um elemento na pilha, o valor de devolução da função, que precede todos os argumentos na
+        pilha. Procedimentos e funções \emph{built-in} são exceção a esta regra, visto que foi
+        necessário gerar código especial para os mesmos.
+
+    \item Para gerar o valor de expressões (operações unárias e binárias), o código para calcular o
+        valor das subexpressões é gerado (recursivamente), e depois utilizam-se diferentes
+        instruções conforme o operador da expressão (ex: \texttt{ADD} para somas de inteiros,
+        \texttt{NOT} para negação lógica, \emph{etc.}).
+
+    \item Leituras e escritas de variáveis são realizadas com as instruções \texttt{PUSH(G|L)} e
+        \texttt{STOREG(G|L)}, sendo os \emph{offsets} aos apontadores de \emph{frame} ou global
+        determinados de acordo com a convenção de armazenamento de variáveis definida acima. Para
+        variáveis que são \emph{arrays}, é necessário, em primeiro lugar, carregar o apontador para
+        o \emph{array} na \emph{heap}, ação à qual se pode seguir o cálculo do índice no
+        \emph{array}. Para isso, para cada índice, calcula-se o valor da expressão do índice,
+        subtrai-se o valor base do \emph{range type} do \emph{array} (com as instruções
+        \texttt{PUSHI} e \texttt{SUB}), e multiplica-se, com a instrução \texttt{MUL}, esse valor
+        pelo tamanho do \emph{elemento} do \emph{array}. Este \emph{offset} é adicionado ao
+        apontador previamente calculado (com \texttt{PADD}) e, no fim da iteração por todos os
+        índices, tem-se  o apontador para posição do \emph{array} que se deseja ler, e que é lida
+        com a instrução \texttt{LOAD} (ou escrita com \texttt{STORE}). Para indexar \emph{strings},
+        a instrução \texttt{CHARAT} é utilizada.
+\end{itemize}
+
+Com esta metodologia, a lógica por detrás da geração de código é simples, mas o código gerado tem
+muitos potenciais para melhoria, pelo que são empregues técnicas de otimização \emph{peephole} para
+o melhorar, como se apresenta de seguida.
+
+Por último, durante a geração de código, são adicionados comentários com o significado de cada
+sequência de instruções \emph{assembly}, e a que \emph{statement} estas pertencem, para ajudar a
+depuração do código. Estes comentários, semelhantes aos símbolos de \emph{debug}, podem ser ativados
+ou desativados pela linha de comandos.
 
 \section{Otimização de Código}
 
@@ -410,6 +516,7 @@ otimizações semelhantes seriam possíveis, mas não foram implementadas devido
 esforço necessário para garantir a correção do compilador em diversos cenários.
 
 \subsection{Otimizações \emph{peephole}}
+\label{peephole}
 
 Após a geração de código, um otimizador \emph{peephole} é utilizado para transformar sequências de
 instruções complexas noutras mais simples. Deste modo, não é necessário adicionar complexidade à
@@ -970,5 +1077,145 @@ constant-list : constant
 variable-list : variable-usage
               | variable-list ',' variable-usage
 \end{lstlisting}
+
+\subsection{Geração de Código dos \emph{Statements}}
+\label{statements-codegen}
+
+\begin{longtable}{|c|c|}
+    % ASSIGN
+    \hline
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+var := expr
+\end{lstlisting}
+    \end{minipage} &
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+expr
+var(mode = write)
+\end{lstlisting}
+    \end{minipage} \\
+
+    % GOTO
+    \hline
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+GOTO label
+\end{lstlisting}
+    \end{minipage} &
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+JUMP label
+\end{lstlisting}
+    \end{minipage} \\
+
+    % CALL
+    \hline
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+procedure(expr1, expr2, ...)
+\end{lstlisting}
+
+    NOTA: \texttt{procedure} é definido pelo utilizador
+    \end{minipage} &
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+expr1()
+expr2()
+...
+PUSHA procedure
+CALL
+POP N
+\end{lstlisting}
+    \end{minipage} \\
+
+    % IF
+    \hline
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+IF expr THEN
+    when-true;
+ELSE
+    when-false;
+\end{lstlisting}
+    \end{minipage} &
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+expr()
+JZ else
+    when-true()
+    JUMP end
+else:
+    when-false()
+end:
+\end{lstlisting}
+    \end{minipage} \\
+
+    % REPEAT UNTIL
+    \hline
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+REPEAT
+    statements
+UNTIL expr
+\end{lstlisting}
+    \end{minipage} &
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+start:
+    statements()
+    expr()
+    JZ start
+\end{lstlisting}
+    \end{minipage} \\
+
+    % WHILE
+    \hline
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+WHILE expr DO
+    statement
+\end{lstlisting}
+    \end{minipage} &
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+start:
+    expr()
+    JZ end
+    statement()
+    JUMP start
+end:
+\end{lstlisting}
+    \end{minipage} \\
+    \hline
+
+    % FOR
+    \hline
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+FOR var := expr1 (TO|DOWNTO) expr2 DO
+    statement
+\end{lstlisting}
+    \end{minipage} &
+    \begin{minipage}{0.5\textwidth}
+        \begin{lstlisting}
+    expr2()
+    expr1()
+start:
+    DUP 1
+    var(mode = write)
+    COPY 2
+    (SUPEQ|INFEQ)
+    JZ end
+    statement()
+    PUSHI 1
+    (ADD|SUB)
+    JUMP start
+end:
+    POP 2
+\end{lstlisting}
+    \end{minipage} \\
+    \hline
+\end{longtable}
 
 \end{document}
