@@ -314,6 +314,75 @@ correção de tipos do código Python das produções.
 
 \section{Otimização de Código}
 
+A otimização do código é feita em duas fases. Em primeiro lugar, são feitas alterações ao GSA para o
+simplificar, e após a geração do código máquina, é utilizada otimização \emph{peephole} para
+simplificar o código gerado, sem que seja necessário adicionar complexidade à geração de código para
+fazer estas transformações.
+
+\subsection{Otimizações ao GSA}
+
+O foco da otimização no GSA foram as expressões, visto que a sua natureza matemática faz com que
+possam ser facilmente manipuladas. Otimizações mais complexas a envolver mais do que uma instrução
+exigiriam a construção de grafos de controlo de fluxo, que assim ainda não seriam suficientes para
+realizar várias otimizações comuns, visto que muitas destas exigem reordenação de instruções. Devido
+ao quão limitada é a otimização baseada apenas num GSA, compreende-se o motivo pelo qual os
+compiladores atuais utilizam representações intermédias numa forma \emph{single static-assignment}
+(SSA) para realizarem as suas otimizações.
+
+O algoritmo de otimização de expressões é recursivo: para uma dada expressão, começam-se por
+otimizar as suas subexpressões, e estas são utilizadas para construir uma nova expressão, que pode
+sofrer alterações com base no nó da sua raiz.
+
+A primeira otimização implementada foi \emph{constant folding}, ou seja, o cálculo do valor das
+expressões desde que as suas subexpressões sejam constantes. No entanto, como não existe reordenação
+de expressões e de \emph{statements}, esta otimização é um pouco limitada. Por exemplo, considerando
+as árvores apresentadas abaixo, apenas a expressão \texttt{2 * 2 * x} será otimizada, devido à
+existência de uma subexpressão totalmente constante:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{res/expression-trees.pdf}
+    \caption{
+        Árvores das expressões \texttt{2 * 2 * x} e \texttt{x * 2 * 2}, com uma árvore otimizável
+        assinalada a vermelho.
+    }
+\end{figure}
+
+Também foram implementadas otimizações capazes de simplificar expressões algébricas. As primeiras
+duas prendem-se com a negação lógica. Caso uma expressão seja constituída por negações aninhadas
+(\texttt{not (not x)}), será substituída pela expressão dentro das duas negações (\texttt{x}).
+Ademais, a negação de uma operação relacional, por exemplo, \texttt{not (x = y)}, será removida, e o
+operador relacional será substituído pelo seu oposto, dando origem, no exemplo acima, a
+\texttt{x <> y}. Por último, também foram implementadas as leis de De Morgan, pelo que expressões
+da forma \texttt{(not p) or (not q)} serão convertidas para \texttt{not (p and q)}, e expressões da
+forma \texttt{(not p) and (not q)} serão convertidas para \texttt{not (p or q)}. Muitas outras
+otimizações semelhantes seriam possíveis, mas não foram implementadas devido ao tempo limitado e ao
+esforço necessário para garantir a correção do compilador em diversos cenários.
+
+\subsection{Otimizações \emph{peephole}}
+
+Após a geração de código, um otimizador \emph{peephole} é utilizado para transformar sequências de
+instruções complexas noutras mais simples. Deste modo, não é necessário adicionar complexidade à
+geração de código em si para extrair um melhor desempenho da EWVM.
+
+A primeira otimização é a substituição de sequências de instruções \texttt{PUSH(I|F) 0} por uma
+única instrução \texttt{PUSHN N}, onde \texttt{N} é o número de instruções substituídas. Esta
+otimização é particularmente útil para a inicialização das variáveis do programa, de uma função, ou
+de um procedimento, que são todas inicializadas a zero.
+
+Outra otimização implementada é a transformação de multiplicações em somas. A sequência de
+instruções \texttt{PUSH(I|F) 2 ; (F)MUL} é substituída por \texttt{DUP; (F)ADD}. Devido ao
+\emph{overhead} da execução da EWVM, esta otimização não faz qualquer diferença no desempenho do
+código gerado, mas trata-se de uma otimização clássica que, devido à sua relevância histórica, foi
+implementada. Na ausência de operações de \emph{shift} na EWVM, não foi possível implementar outras
+otimizações de multiplicações e divisões por potências de base dois constantes.
+
+Por último, também se implementou uma otimização para reduzir o número de acessos a variáveis: a
+sequência de instruções \texttt{STORE(L|G) N ; PUSH(L|G) N} é substituída por
+\texttt{DUP 1 ; STORE(L|G) N}, evitando a leitura de uma variável que se acabou de escrever para
+memória. Esta otimização é útil, por exemplo, na sequência de \emph{statements} Pascal
+\texttt{x := ... ; y := x + ...}.
+
 \section{Erros Descritivos}
 
 Quando um compilador encontra erros no código fonte, deve apresentá-los ao utilizador. A qualidade
@@ -478,8 +547,8 @@ intermédio, e representação intermédia do \emph{asssembly} EWVM). O compilad
 gerar código eficiente, sendo usadas técnicas de manipulação de AST e de otimização \emph{peephole}
 para melhorar o desempenho do código. Note-se que as otimizações feitas são bastante limitadas,
 visto que otimizações mais complexas exigiriam a construção de grafos de controlo de fluxo, e o
-desenvolvimento de outras representações intermédias, possivelmente da forma
-\emph{single static-assignment} (SSA), tal como o LLVM \cite{llvm}.
+desenvolvimento de outras representações intermédias, possivelmente da forma SSA, tal como o LLVM
+\cite{llvm}.
 
 \section{Conclusão}
 
