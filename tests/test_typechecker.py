@@ -16,12 +16,8 @@
 #
 # -------------------------------------------------------------------------------------------------
 
-import sys
-import inspect
-import functools
 from typing import Callable, Any, Dict, List, Tuple, Union
 
-import ply.lex
 from plpc.typechecker import (
     TypeChecker,
     TypeCheckerError,
@@ -37,35 +33,21 @@ from plpc.typechecker import (
 )
 
 class DummyLexer:
-    def __init__(self):
+    def __init__(self) -> None:
         self.lexdata = ""
-
-    def input(self, text: str) -> None:
-        pass
-
-    def token(self):
-        return None
 
     @property
     def lineno(self) -> int:
         return 0
 
-    @property
-    def lexpos(self) -> int:
-        return 0
-
-ExpectedMapping = Dict[
-    str,
-    List[ Tuple[ Tuple[Any, ...], Union[Any, type] ] ]
-]
+ExpectedMapping = Dict[str, List[Tuple[Tuple[Any, ...], Union[Any, type]]]]
 
 def successful_test() -> Callable[[Callable[[], ExpectedMapping]], Callable[[], None]]:
-    def decorator(test_fn: Callable[[], ExpectedMapping]) -> Callable[[], None]:
-        @functools.wraps(test_fn)
+    def decorator(test: Callable[[], ExpectedMapping]) -> Callable[[], None]:
         def wrapper() -> None:
             tc = TypeChecker("<test-input>", DummyLexer())
 
-            expected_map: ExpectedMapping = test_fn()
+            expected_map: ExpectedMapping = test()
 
             for method_name, test_list in expected_map.items():
                 if not hasattr(tc, method_name):
@@ -77,7 +59,7 @@ def successful_test() -> Callable[[Callable[[], ExpectedMapping]], Callable[[], 
                 for args_tuple, expected_or_exc in test_list:
                     if not isinstance(args_tuple, tuple):
                         raise AssertionError(
-                            f"In test '{test_fn.__name__}', for method '{method_name}', "
+                            f"In test '{test.__name__}', for method '{method_name}', "
                             f"expected args to be a tuple, got {type(args_tuple).__name__}"
                         )
 
@@ -85,7 +67,7 @@ def successful_test() -> Callable[[Callable[[], ExpectedMapping]], Callable[[], 
                         try:
                             _ = method(*args_tuple)
                             raise AssertionError(
-                                f"In test '{test_fn.__name__}': "
+                                f"In test '{test.__name__}': "
                                 f"Expected {method_name}{args_tuple} to raise "
                                 f"{expected_or_exc.__name__}, but it returned successfully."
                             )
@@ -93,7 +75,7 @@ def successful_test() -> Callable[[Callable[[], ExpectedMapping]], Callable[[], 
                             pass
                         except Exception as other_exc:
                             raise AssertionError(
-                                f"In test '{test_fn.__name__}': Expected {method_name}{args_tuple} "
+                                f"In test '{test.__name__}': Expected {method_name}{args_tuple} "
                                 f"to raise {expected_or_exc.__name__}, but it raised "
                                 f"{type(other_exc).__name__} instead."
                             ) from other_exc
@@ -103,13 +85,13 @@ def successful_test() -> Callable[[Callable[[], ExpectedMapping]], Callable[[], 
                             result = method(*args_tuple)
                         except Exception as e:
                             raise AssertionError(
-                                f"In test '{test_fn.__name__}': Calling {method_name}{args_tuple} "
+                                f"In test '{test.__name__}': Calling {method_name}{args_tuple} "
                                 f"raised {type(e).__name__}, but expected {expected_or_exc!r}."
                             ) from e
 
                         if result != expected_or_exc:
                             raise AssertionError(
-                                f"In test '{test_fn.__name__}': {method_name}{args_tuple} returned "
+                                f"In test '{test.__name__}': {method_name}{args_tuple} returned "
                                 f"{result!r}, but expected {expected_or_exc!r}."
                             )
 
@@ -118,7 +100,7 @@ def successful_test() -> Callable[[Callable[[], ExpectedMapping]], Callable[[], 
     return decorator
 
 @successful_test()
-def test_constant_type():
+def test_constant_type() -> ExpectedMapping:
     enum_const = EnumeratedTypeConstantValue(
         name="EVEN",
         value=2,
@@ -138,7 +120,7 @@ def test_constant_type():
     }
 
 @successful_test()
-def test_constant_ordinal_value():
+def test_constant_ordinal_value() -> ExpectedMapping:
     enum_const = EnumeratedTypeConstantValue(
         name="EVEN",
         value=2,
@@ -150,19 +132,19 @@ def test_constant_ordinal_value():
             ( (False,), 0 ),
             ( (True,), 1 ),
             ( (13,), 13 ),
-            ( ('C',), ord('C') ),
+            ( ("C",), ord("C") ),
             ( (enum_const,), 2 ),
             ( ((3.14,),), TypeCheckerError ),
         ],
     }
 
 @successful_test()
-def test_unary_operation_type():
-    u_int = UnaryOperation('+', ( (7, BuiltInType.INTEGER) ))
-    u_real = UnaryOperation('-', ( (2.5, BuiltInType.REAL) ))
-    u_bool = UnaryOperation('not', ( (False, BuiltInType.BOOLEAN) ))
-    u_bad1 = UnaryOperation('+', ( (True, BuiltInType.BOOLEAN) ))
-    u_bad2 = UnaryOperation('not', ( (5, BuiltInType.INTEGER) ))
+def test_unary_operation_type() -> ExpectedMapping:
+    u_int = UnaryOperation("+", ( (7, BuiltInType.INTEGER) ))
+    u_real = UnaryOperation("-", ( (2.5, BuiltInType.REAL) ))
+    u_bool = UnaryOperation("not", ( (False, BuiltInType.BOOLEAN) ))
+    u_bad1 = UnaryOperation("+", ( (True, BuiltInType.BOOLEAN) ))
+    u_bad2 = UnaryOperation("not", ( (5, BuiltInType.INTEGER) ))
 
     return {
         "get_unary_operation_type": [
@@ -175,18 +157,18 @@ def test_unary_operation_type():
     }
 
 @successful_test()
-def test_binary_operation_type():
-    b1 = BinaryOperation('+', (5, BuiltInType.INTEGER), (2.3, BuiltInType.REAL))
-    b2 = BinaryOperation('-', (10, BuiltInType.INTEGER), (3, BuiltInType.INTEGER))
-    b3 = BinaryOperation('/', (7, BuiltInType.INTEGER), (2, BuiltInType.INTEGER))
-    b4 = BinaryOperation('div', (9, BuiltInType.INTEGER), (2, BuiltInType.INTEGER))
-    b5 = BinaryOperation('and', (True, BuiltInType.BOOLEAN), (False, BuiltInType.BOOLEAN))
-    b6 = BinaryOperation('=', (3, BuiltInType.INTEGER), (3, BuiltInType.INTEGER))
+def test_binary_operation_type() -> ExpectedMapping:
+    b1 = BinaryOperation("+", (5, BuiltInType.INTEGER), (2.3, BuiltInType.REAL))
+    b2 = BinaryOperation("-", (10, BuiltInType.INTEGER), (3, BuiltInType.INTEGER))
+    b3 = BinaryOperation("/", (7, BuiltInType.INTEGER), (2, BuiltInType.INTEGER))
+    b4 = BinaryOperation("div", (9, BuiltInType.INTEGER), (2, BuiltInType.INTEGER))
+    b5 = BinaryOperation("and", (True, BuiltInType.BOOLEAN), (False, BuiltInType.BOOLEAN))
+    b6 = BinaryOperation("=", (3, BuiltInType.INTEGER), (3, BuiltInType.INTEGER))
 
     # invalid combinations
-    b_bad1 = BinaryOperation('+', (3, BuiltInType.INTEGER), (True, BuiltInType.BOOLEAN))
-    b_bad2 = BinaryOperation('or', (1, BuiltInType.INTEGER), (0, BuiltInType.INTEGER))
-    b_bad3 = BinaryOperation('<', (1, BuiltInType.INTEGER), (2.5, BuiltInType.REAL))
+    b_bad1 = BinaryOperation("+", (3, BuiltInType.INTEGER), (True, BuiltInType.BOOLEAN))
+    b_bad2 = BinaryOperation("or", (1, BuiltInType.INTEGER), (0, BuiltInType.INTEGER))
+    b_bad3 = BinaryOperation("<", (1, BuiltInType.INTEGER), (2.5, BuiltInType.REAL))
 
     return {
         "get_binary_operation_type": [
@@ -203,7 +185,7 @@ def test_binary_operation_type():
     }
 
 @successful_test()
-def test_can_assign():
+def test_can_assign() -> ExpectedMapping:
     return {
         "can_assign": [
             ( (BuiltInType.INTEGER, BuiltInType.INTEGER), True ),
@@ -216,8 +198,10 @@ def test_can_assign():
     }
 
 @successful_test()
-def test_type_after_indexation():
-    array1 = ArrayType(BuiltInType.INTEGER, [RangeType(start=1, end=10, subtype=BuiltInType.INTEGER)])
+def test_type_after_indexation() -> ExpectedMapping:
+    array1 = ArrayType(BuiltInType.INTEGER, [
+        RangeType(start=1, end=10, subtype=BuiltInType.INTEGER)
+    ])
     array2 = ArrayType(BuiltInType.REAL, [
         RangeType(start=1, end=5, subtype=BuiltInType.INTEGER),
         RangeType(start=1, end=5, subtype=BuiltInType.INTEGER)
@@ -226,7 +210,9 @@ def test_type_after_indexation():
     return {
         "type_after_indexation": [
             ( (array1, BuiltInType.INTEGER, (0,1)), BuiltInType.INTEGER ),
-            ( (array2, BuiltInType.INTEGER, (0,1)), ArrayType(BuiltInType.REAL, [RangeType(1,5, BuiltInType.INTEGER)]) ),
+            ( (array2, BuiltInType.INTEGER, (0,1)), ArrayType(BuiltInType.REAL, [
+                RangeType(1,5, BuiltInType.INTEGER)
+            ]) ),
             ( (BuiltInType.STRING, BuiltInType.INTEGER, (0,1)), BuiltInType.CHAR ),
             ( (array1, BuiltInType.REAL, (0,1)), TypeCheckerError ),
             ( (BuiltInType.BOOLEAN, BuiltInType.INTEGER, (0,1)), TypeCheckerError ),
@@ -234,16 +220,18 @@ def test_type_after_indexation():
     }
 
 @successful_test()
-def test_fail_on_string_indexation():
+def test_fail_on_string_indexation() -> ExpectedMapping:
     var1 = VariableUsage(
         VariableDefinition("tmp", BuiltInType.STRING, False),
         BuiltInType.STRING,
-        [('A', BuiltInType.CHAR),
-         ('B', BuiltInType.CHAR)]
+        [("A", BuiltInType.CHAR),
+         ("B", BuiltInType.CHAR)]
     )
 
     var2 = VariableUsage(
-        VariableDefinition("tmp", ArrayType(BuiltInType.INTEGER, [RangeType(1, 5, BuiltInType.INTEGER)]), False),
+        VariableDefinition("tmp", ArrayType(BuiltInType.INTEGER, [
+            RangeType(1, 5, BuiltInType.INTEGER)
+        ]), False),
         ArrayType(BuiltInType.INTEGER, [RangeType(1, 5, BuiltInType.INTEGER)]),
         [(3, BuiltInType.INTEGER)]
     )
