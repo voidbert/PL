@@ -46,26 +46,24 @@ ExpectedMapping = Dict[str, Tuple[SymbolValue, int]]
 
 _BUILTIN_SYMBOLS : ExpectedMapping = {
     "integer": (TypeDefinition("integer", BuiltInType.INTEGER), 0),
-    "real":    (TypeDefinition("real",    BuiltInType.REAL),    0),
+    "real": (TypeDefinition("real", BuiltInType.REAL), 0),
     "boolean": (TypeDefinition("boolean", BuiltInType.BOOLEAN), 0),
-    "char":    (TypeDefinition("char",    BuiltInType.CHAR),    0),
-    "string":  (TypeDefinition("char",    BuiltInType.STRING),  0),
-    "true":   (ConstantDefinition("true",  True),  0),
-    "false":  (ConstantDefinition("false", False), 0),
+    "char": (TypeDefinition("char", BuiltInType.CHAR), 0),
+    "true": (ConstantDefinition("true", True), 0),
+    "false": (ConstantDefinition("false", False), 0),
     "maxint": (ConstantDefinition("maxint", 1 << 16 - 1), 0),
-    "write":   (CallableDefinition("write",   None, None, Block([],[],[],[],[],[])), 0),
+    "write": (CallableDefinition("write", None, None, Block([],[],[],[],[],[])), 0),
     "writeln": (CallableDefinition("writeln", None, None, Block([],[],[],[],[],[])), 0),
-    "read":    (CallableDefinition("read",    None, None, Block([],[],[],[],[],[])), 0),
-    "readln":  (CallableDefinition("readln",  None, None, Block([],[],[],[],[],[])), 0),
-    "length":  (
-        CallableDefinition(
-            "length",
-            None,
-            VariableDefinition("length", BuiltInType.INTEGER, True),
-            Block([],[],[],[],[],[])
-        ),
-        0
-    ),
+    "read": (CallableDefinition("read", None, None, Block([],[],[],[],[],[])), 0),
+    "readln": (CallableDefinition("readln", None, None, Block([],[],[],[],[],[])), 0),
+    "string": (TypeDefinition("char", BuiltInType.STRING), 0),
+    "length": (CallableDefinition("length",
+                                [
+                                    VariableDefinition("str", BuiltInType.STRING, True)
+                                ],
+                                VariableDefinition(
+                                    "length", BuiltInType.INTEGER, True),
+                                Block([],[],[],[],[],[])), 0),
 }
 
 def successful_test() -> Callable[[Callable[[SymbolTable], ExpectedMapping]], Callable[[], None]]:
@@ -160,7 +158,7 @@ def test_nested_scopes(symtab: SymbolTable) -> ExpectedMapping:
     }
 
 @successful_test()
-def test_unstack_global_scope_raises(symtab: SymbolTable) -> ExpectedMapping:
+def test_unstack_global_scope(symtab: SymbolTable) -> ExpectedMapping:
     symtab.unstack_top_scope()
     return {}
 
