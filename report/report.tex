@@ -78,14 +78,58 @@
     um compilador de Pascal Standard \cite{iso} para a \emph{stack machine} EWVM \cite{ewvm}. O
     desenvolvimento dos analisadores léxico e sintático foi feito em duas fases: em primeiro lugar,
     criaram-se versões mínimas destes componentes, funcionais para um conjunto reduzido de programas
-    de exemplo, que depois foram enriquecidas com informação do \emph{standard} ISO, garantido que o
+    de exemplo, que depois foram enriquecidos com informação do \emph{standard} ISO, garantido que o
     compilador desenvolvido implementava a linguagem com correção. Já a análise semântica foi feita
     diretamente com informação da ISO, bem como a geração de código máquina foi feita diretamente
-    com base na documentação da EWVM. Os resultados obtidos, apesar de irem além do que foi pedido
-    pelo enunciado do trabalho prático proposto, não cumprem por completo o \emph{standard} ISO.
+    com base na documentação da EWVM. Adicionalmente, implementaram-se mensagens de erro
+    descritivas, diversos testes do compilador, e otimização do código, tanto do grafo de sintaxe
+    abstrata como do código EWVM gerado. Os resultados obtidos, apesar de irem além do que foi
+    pedido pelo enunciado do trabalho prático proposto, não cumprem por completo o \emph{standard}
+    ISO.
 \end{abstract}
 
-\section{Arquitetura}
+\section{Arquitetura e Utilização do Compilador}
+
+Abaixo, apresenta-se um esquema da arquitetura do compilador desenvolvido:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{res/architecture.pdf}
+    \caption{Arquitetura do compilador desenvolvido.}
+\end{figure}
+
+A compilação começa com a divisão do código fonte em lexemas, que depois são utilizados para a
+análise sintática. Por diversos motivos explicados posteriormente, a análise semântica é feita com
+ações semânticas durante a análise sintática, e origina um grafo de semântica abstrata (GSA).
+Opcionalmente, antes da geração de código EWVM, o GSA pode ser otimizado. Depois, segue-se a geração
+de código EWVM, que pode ainda ser otimizado por métodos de otimização \emph{peephole}.
+
+A orquestração destes vários componentes é feita pelo ponto de entrada do compilador, que analisa
+os argumentos da linha de comandos para determinar o ficheiro de fonte, se o código deve ou não ser
+otimizado, se devem ou não ser exportados símbolos de \emph{debug}, e para que ficheiro o código
+EWVM gerado deve ser exportado. Por omissão, o compilador lê o código fonte do \texttt{stdin}, e
+escreve o código gerado para o \texttt{stdout}. Segue a lista completa de opções de linha de
+comandos:
+
+\lstset{
+    language={}
+}
+
+\begin{lstlisting}
+
+usage: python -m plpc [-h] [-o O] [-O] [-g] [file]
+
+Compile Pascal for the EWVM.
+
+positional arguments:
+  file        path to the file to compile
+
+options:
+  -h, --help  show this help message and exit
+  -o O        output assembly file
+  -O          optimize generated code
+  -g          add debug symbols
+\end{lstlisting}
 
 \section{Análise Léxica}
 
@@ -106,6 +150,10 @@ reconhecidos com um identificador, em vez de duas palavras reservadas \texttt{FO
 Depois, procedeu-se à definição das prioridades de reconhecimento dos vários lexemas. Para tal,
 muitos dos tipos de lexema foram definidos na forma de função, para a sua ordem de reconhecimento
 ser a ordem de declaração das funções. Segue-se, abaixo, um exemplo de uma destas declarações:
+
+\lstset{
+    language=python
+}
 
 \begin{lstlisting}
 
@@ -136,17 +184,17 @@ que é essencial para a implementação de testes unitários, nos quais se entra
 posteriormente neste documento.
 
 Para o desenvolvimento do analisador léxico, a leitura do \emph{standard} ISO que define Pascal
-ajudou apenas a limar algumas arestas. A título de exemplo, permitiu corrigir a definição de
-comentário, visto que em Pascal, um comentário começado por \texttt{(*} pode terminar em
+ajudou apenas a polir algumas arestas. A título de exemplo, permitiu corrigir a definição de
+comentário, visto que, em Pascal, um comentário começado por \texttt{(*} pode terminar em
 \texttt{\}}, ou um comentário começado por \texttt{\{} pode acabar em \texttt{*)}. Ademais, o
 \emph{standard} ensinou o grupo de trabalho sobre caracteres alternativos,
 \footnote{
-    Devido aos \emph{character-sets} limitados de alguns computadores quando Pascal foi
-    desenvolvido, a linguagem permite substituir sequências de alguns caráteres por outros. Por
+    Devido aos \emph{character-sets} limitados de alguns sistemas contemporâneos ao desenvolvimento
+    de Pascal, a linguagem permite substituir sequências de alguns caráteres por outros. Por
     exemplo: \texttt{'(.'} $\rightarrow$ \texttt{'['}.
 }
 que foram implementados, bem como alguns tipos de
-\emph{statements} menos conhecidos (como \texttt{WITH}), que utilizavam lexemas que também foram
+\emph{statement} menos conhecidos (como \texttt{WITH}), que utilizavam lexemas que também foram
 definidos. Por último, a leitura do \emph{standard} também fez com que \texttt{NIL} fosse
 considerado um lexema, em vez de um identificador pré-definido na tabela de símbolos (como, por
 exemplo, \texttt{maxint}).
@@ -222,6 +270,8 @@ de um símbolo, listas de ocorrências de um símbolo, \emph{etc.}. Assim, tamb�
 remover muito código duplicado do \emph{parser} como, por exemplo, as várias declarações de listas
 de diferentes símbolos presentes na gramática.
 
+A gramática utilizada pode ser consultada no anexo \ref{grammar-definition}.
+
 \section{Análise Semântica}
 
 A análise semântica, no compilador desenvolvido, é feita em ações semânticas, ou seja, código
@@ -235,13 +285,13 @@ compilador. Por último, para informar o utilizador da localização dos erros s
 seria necessário armazenar a localização de todos os lexemas na árvore de sintaxe abstrata, ou seja
 torná-la uma árvore de sintaxe concreta, o que aumentaria a sua complexidade. Logo, decidiu-se que a
 análise semântica seria feita em ações semânticas, e que o resultado do \emph{parser} seria um grafo
-de semântica abstrata (GSA), ou seja, uma AST enriquecida com referências semânticas (referência a
+de semântica abstrata, ou seja, uma AST enriquecida com referências semânticas (referência a
 declarações de variáveis, propagação de tipos, \emph{etc.}).
 
 Gerar um GSA durante o \emph{parsing} só é possível porque, em Pascal, para referenciar um objeto
 (constante, variável, \emph{etc.}), é necessário que ele já tenha sido declarado antes. Logo, tendo
 em conta que o \emph{parser} utiliza recursividade à esquerda, quando um objeto é declarado, é
-adicionado à tabela de símbolos, e quando o código o referencia, é realizada uma consulta a esta
+adicionado a uma tabela de símbolos, e quando o código o referencia, é realizada uma consulta a esta
 tabela. Esta estrutura de dados consiste numa pilha de tabelas de \emph{hash}, onde cada elemento da
 pilha corresponde a um \emph{scope} aninhado, e associa os nomes de objetos nesse \emph{scope} aos
 objetos em si. Considere-se o exemplo abaixo:
@@ -276,11 +326,11 @@ No corpo do procedimento, o estado da tabela de símbolos será o seguinte:
     \hline
 \end{tabular}
 
-Para interrogar a tabela de símbolos, por exemplo, quando uma variável é usada, começa-se por
+Para interrogar a tabela de símbolos, por exemplo, quando uma variável é utilizada, começa-se por
 pesquisar o identificador referenciado no topo da \emph{stack}, e vai-se descendo até ele ser
 encontrado. Caso não seja encontrado, ocorre um erro semântico.
 
-Na criação do GSA, estas referências aos objetos são substituídos por arestas para esses objetos.
+Na criação do GSA, estas referências aos objetos são substituídas por arestas para esses objetos.
 Abaixo, pode observar-se uma versão simplificada do GSA do programa acima:
 
 \begin{figure}[H]
@@ -294,8 +344,8 @@ fazer, sempre que se encontram atribuições, indexações, ou outras operaçõe
 um módulo \texttt{typechecker}, com funções auxiliares para verificação de compatibilidade de tipos,
 é utilizado para verificar se as operações no código são possíveis dados os tipos dos operandos.
 Na construção do GSA, esta informação de tipos é adicionada aos vários nós, para não ter de ser
-recalculada durante as fases de otimização e geração de código. Abaixo, segue-se uma versão
-simplificada do GSA da expressão \texttt{1 + 5.0 < 7.0}:
+recalculada durante as fases de otimização e geração de código. Abaixo, segue-se o GSA completo da
+expressão \texttt{1 + 5.0 < 7.0}:
 
 \begin{figure}[H]
     \centering
@@ -305,10 +355,10 @@ simplificada do GSA da expressão \texttt{1 + 5.0 < 7.0}:
 
 O analisador semântico foi, sem dúvida, o componente cujo desenvolvimento mais demorado foi,
 especialmente devido a todos os cuidados necessários com o sistema de tipos: foi necessário um
-grande esforço para pensar em todos os erros de tipo possíveis, e detetá-los corretamente. Ademais,
-devido à API do \texttt{ply.yacc}, não foi possível fazer validação estática de tipos Python com
-ferramentas como o \texttt{mypy} \cite{mypy}, pelo que foi também demorado garantir, manualmente, a
-correção de tipos do código Python das produções.
+grande esforço para pensar em todos os erros de tipo possíveis, e como os detetar corretamente.
+Ademais, devido à API do \texttt{ply.yacc}, não foi possível fazer validação estática de tipos
+Python com ferramentas como o \texttt{mypy} \cite{mypy}, pelo que foi também demorado garantir,
+manualmente, a correção de tipos do código Python nas produções.
 
 \section{Geração de Código}
 
@@ -414,8 +464,8 @@ inválidas, e prosseguir com a análise léxica. Abaixo, apresenta-se um exemplo
                   ^~
 \end{lstlisting}
 
-Como se pode observar, os erros são formatos para que seja possível ao utilizador ver a mensagem de
-erro, a sua localização no código, e o código que causou o erro. Esta formatação foi inspirada na
+Como se pode observar, os erros são formatados para que seja possível ao utilizador ver a mensagem
+do erro, a sua localização no código, e o código que causou o erro. Esta formatação foi inspirada na
 formatação utilizada pelas versões mais recentes do GCC \cite{gcc-errors}.
 
 Em relação à análise sintática, quando um erro é detetado, o autómato LALR é inspecionado para
@@ -430,7 +480,7 @@ esperava outros tipos de lexema:
 \end{lstlisting}
 
 Também foram adicionadas regras à gramática para reconhecer erros frequentes, cujas ações semânticas
-apresentam mensagens de erro com sugestões ao utilizador de como pode corrigir o seu código:
+apresentam mensagens do erro com sugestões ao utilizador de como pode corrigir o seu código:
 
 \begin{lstlisting}
 
@@ -449,7 +499,7 @@ escritos à mão, em vez de geradores de \emph{parsers}. \cite{compilers-handwri
 
 Em relação à recuperação de erros, esta é muito limitada. Visto que a análise semântica é feita em
 simultâneo com a análise sintática, um erro de sintaxe que, por exemplo, faça com que uma constante,
-variável, \ldots, não seja declarada, fará surgir erros em cascata em todo o código que usa essa
+variável, \ldots, não seja declarada, fará surgir erros em cascata em todo o código que use essa
 constante / variável / \ldots. Para os evitar, a recuperação de erros apenas é possível com erros
 mínimos, e mesmo assim, erros em cascata podem surgir.
 
@@ -487,6 +537,9 @@ avisos:
      9 | function BinToInt(bin: string): integer;
                            ^~~
 \end{lstlisting}
+
+Uma possível área para melhoria do compilador seria a implementação de mais destes avisos, capazes
+de detetar possíveis erros no código de uma forma semelhante a um \emph{linter}.
 
 Durante a geração de código EWVM, alguns avisos também podem ocorrer. Estes devem-se a limitações da
 EWVM, que não permite a representação da totalidade do \emph{standard} Pascal. Segue-se o exemplo de
@@ -527,6 +580,10 @@ funções e procedimentos. Em relação às funcionalidades por implementar, des
 de dados por suportar (apontadores, \emph{records}, \emph{sets} e \emph{files}), bem como os
 operadores a si associados.
 
+Por outro lado, o cumprimento total do \emph{standard} ISO não foi a maior preocupação dos autores
+do compilador, pelo que também foram implementados diversos testes, mecanismos de otimização de
+código, tanto do GSA como do código EWVM, e mensagens de erro explicativas.
+
 Em relação à correção do compilador, este foi capaz de compilar corretamente os programas de teste
 fornecidos pela equipa docente, bem como outros testes construídos pelo grupo de trabalho, que
 testam funcionalidades específicas e complexas, onde podem residir falhas. A passagem destes testes
@@ -544,7 +601,7 @@ do significado de diversos métodos, de campos de estruturas de dados, \emph{etc
 Por último, o compilador desenvolvido é bastante eficiente, na medida que foi arquitetado para
 minimizar o número de iterações pelas várias estruturas com que lida (código fonte, grafo
 intermédio, e representação intermédia do \emph{asssembly} EWVM). O compilador também é capaz de
-gerar código eficiente, sendo usadas técnicas de manipulação de AST e de otimização \emph{peephole}
+gerar código eficiente, sendo usadas técnicas de manipulação do GST e de otimização \emph{peephole}
 para melhorar o desempenho do código. Note-se que as otimizações feitas são bastante limitadas,
 visto que otimizações mais complexas exigiriam a construção de grafos de controlo de fluxo, e o
 desenvolvimento de outras representações intermédias, possivelmente da forma SSA, tal como o LLVM
@@ -691,7 +748,7 @@ ignore_COMMENT = r'({|\(\*)((?!{|\(\*)(.|\n))*?(}|\*\))'
 \end{lstlisting}
 
 \subsection{Gramática}
-\label{lexer-definition}
+\label{grammar-definition}
 
 Segue-se a gramática utilizada no compilador, sem as produções utilizadas para deteção de erros:
 
