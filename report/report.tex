@@ -1,5 +1,6 @@
 \documentclass[12pt, a4paper]{article}
 
+\usepackage{array}
 \usepackage[portuguese]{babel}
 \usepackage{caption}
 \usepackage{float}
@@ -223,6 +224,92 @@ de diferentes símbolos presentes na gramática.
 
 \section{Análise Semântica}
 
+A análise semântica, no compilador desenvolvido, é feita em ações semânticas, ou seja, código
+associado a produções na gramática, que é executado quando uma redução é feita por uma dessas
+produções. Deste modo, as análises sintática e semântica são feitas em simultâneo, o que traz várias
+vantagens. Em primeiro lugar, não é necessário implementar várias estruturas intermédias: em vez de
+uma árvore de sintaxe abstrata (AST), à qual é depois adicionada informação semântica, uma única
+estrutura com informação semântica basta. Ademais, ao fazer estes dois processos em simultâneo,
+evita-se a iteração por mais uma estrutura intermédia, possivelmente melhorando o desempenho do
+compilador. Por último, para informar o utilizador da localização dos erros semânticos no código,
+seria necessário armazenar a localização de todos os lexemas na árvore de sintaxe abstrata, ou seja
+torná-la uma árvore de sintaxe concreta, o que aumentaria a sua complexidade. Logo, decidiu-se que a
+análise semântica seria feita em ações semânticas, e que o resultado do \emph{parser} seria um grafo
+de semântica abstrata (GSA), ou seja, uma AST enriquecida com referências semânticas (referência a
+declarações de variáveis, propagação de tipos, \emph{etc.}).
+
+Gerar um GSA durante o \emph{parsing} só é possível porque, em Pascal, para referenciar um objeto
+(constante, variável, \emph{etc.}), é necessário que ele já tenha sido declarado antes. Logo, tendo
+em conta que o \emph{parser} utiliza recursividade à esquerda, quando um objeto é declarado, é
+adicionado à tabela de símbolos, e quando o código o referencia, é realizada uma consulta a esta
+tabela. Esta estrutura de dados consiste numa pilha de tabelas de \emph{hash}, onde cada elemento da
+pilha corresponde a um \emph{scope} aninhado, e associa os nomes de objetos nesse \emph{scope} aos
+objetos em si. Considere-se o exemplo abaixo:
+
+\lstset{
+    language=pascal
+}
+
+\begin{lstlisting}
+
+program SymbolTableExample;
+var
+    x, y: integer;
+
+procedure exampleProcedure(z: integer);
+begin
+    ;
+end;
+
+begin
+    y := y + 1;
+end
+\end{lstlisting}
+
+No corpo do procedimento, o estado da tabela de símbolos será o seguinte:
+
+\begin{tabular}{|>{\centering\arraybackslash}p{\textwidth}|}
+    \hline
+    \texttt{\{ 'z': VariableDefinition(...) \}} \\
+    \hline
+    \texttt{\{ 'x': VariableDefinition(...), 'y': VariableDefinition(...) \}} \\
+    \hline
+\end{tabular}
+
+Para interrogar a tabela de símbolos, por exemplo, quando uma variável é usada, começa-se por
+pesquisar o identificador referenciado no topo da \emph{stack}, e vai-se descendo até ele ser
+encontrado. Caso não seja encontrado, ocorre um erro semântico.
+
+Na criação do GSA, estas referências aos objetos são substituídos por arestas para esses objetos.
+Abaixo, pode observar-se uma versão simplificada do GSA do programa acima:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{res/variable-reference.pdf}
+    \caption{GSA do programa apresentado após remoção de informação de tipos.}
+\end{figure}
+
+Também é durante a análise semântica que se garante a correção de tipos do programa Pascal. Para o
+fazer, sempre que se encontram atribuições, indexações, ou outras operações lógicas e aritméticas,
+um módulo \texttt{typechecker}, com funções auxiliares para verificação de compatibilidade de tipos,
+é utilizado para verificar se as operações no código são possíveis dados os tipos dos operandos.
+Na construção do GSA, esta informação de tipos é adicionada aos vários nós, para não ter de ser
+recalculada durante as fases de otimização e geração de código. Abaixo, segue-se uma versão
+simplificada do GSA da expressão \texttt{1 + 5.0 < 7.0}:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{res/expression-types.pdf}
+    \caption{GSA de \texttt{1 + 5.0 < 7.0} com informação de tipos.}
+\end{figure}
+
+O analisador semântico foi, sem dúvida, o componente cujo desenvolvimento mais demorado foi,
+especialmente devido a todos os cuidados necessários com o sistema de tipos: foi necessário um
+grande esforço para pensar em todos os erros de tipo possíveis, e detetá-los corretamente. Ademais,
+devido à API do \texttt{ply.yacc}, não foi possível fazer validação estática de tipos Python com
+ferramentas como o \texttt{mypy} \cite{mypy}, pelo que foi também demorado garantir, manualmente, a
+correção de tipos do código Python das produções.
+
 \section{Geração de Código}
 
 \section{Otimização de Código}
@@ -438,15 +525,15 @@ projeto foi concluído com sucesso.
         P. Eaton, ``Parser generators vs. handwritten parsers: surveying major language
         implementations in 2021.'' Phil Eaton. Accessed: May 31, 2025. [Online.] Available:
         \url{https://notes.eatonphil.com/parser-generators-vs-handwritten-parsers-survey-2021.html}
+    \bibitem{mypy}
+        The mypy project.``mypy.'' mypy. Accessed: May 29, 2025. [Online.] Available:
+        \url{https://mypy-lang.org/}
     \bibitem{c}
         \emph{Information Technology -- Programming Languages -- C}, ISO 9899, 2024. [Online].
         Available: \url{https://www.iso.org/standard/82075.html}
     \bibitem{llvm}
         LLVM-admin team.``The LLVM Compiler Infrastructure.'' LLVM. Accessed: May 29, 2025.
         [Online.] Available: \url{https://llvm.org/}
-    \bibitem{mypy}
-        The mypy project.``mypy.'' mypy. Accessed: May 29, 2025. [Online.] Available:
-        \url{https://mypy-lang.org/}
 \end{thebibliography}
 \endgroup
 
