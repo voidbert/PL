@@ -382,9 +382,7 @@ Em relação à recuperação de erros, esta é muito limitada. Visto que a aná
 simultâneo com a análise sintática, um erro de sintaxe que, por exemplo, faça com que uma constante,
 variável, \ldots, não seja declarada, fará surgir erros em cascata em todo o código que usa essa
 constante / variável / \ldots. Para os evitar, a recuperação de erros apenas é possível com erros
-mínimos.
-
-{\color{red} TODO - mais informação sobre recuperação de erros}
+mínimos, e mesmo assim, erros em cascata podem surgir.
 
 Em relação a erros semânticos, estes são muito fáceis de apresentar. Como a análise semântica é
 feita em ações semânticas, é trivial, com recurso à função \texttt{lexspan}, saber a localização de
