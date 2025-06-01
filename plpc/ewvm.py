@@ -274,6 +274,8 @@ class _EWVMCodeGenerator:
             self.generate_expression_assembly(expression[0].left)
             self.generate_expression_assembly(expression[0].right)
 
+            any_real = BuiltInType.REAL in [expression[0].left[1], expression[0].right[1]]
+
             instruction: str
             if expression[0].operator == '+':
                 instruction = 'FADD' if expression[1] == BuiltInType.REAL else 'ADD'
@@ -288,13 +290,13 @@ class _EWVMCodeGenerator:
             elif expression[0].operator in ['=', '<>']:
                 instruction = 'EQUAL'
             elif expression[0].operator == '<':
-                instruction = 'FINF' if expression[1] == BuiltInType.REAL else 'INF'
+                instruction = 'FINF' if any_real else 'INF'
             elif expression[0].operator == '>':
-                instruction = 'FSUB' if expression[1] == BuiltInType.REAL else 'SUP'
+                instruction = 'FSUB' if any_real else 'SUP'
             elif expression[0].operator == '<=':
-                instruction = 'FINFEQ' if expression[1] == BuiltInType.REAL else 'INFEQ'
+                instruction = 'FINFEQ' if any_real else 'INFEQ'
             elif expression[0].operator == '>=':
-                instruction = 'FSUPEQ' if expression[1] == BuiltInType.REAL else 'SUPEQ'
+                instruction = 'FSUPEQ' if any_real else 'SUPEQ'
 
             self.program.append(EWVMStatement(instruction))
             if expression[0].operator == '<>':
