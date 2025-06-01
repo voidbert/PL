@@ -100,8 +100,11 @@ class Comment:
 
 EWVMProgram = list[Label | EWVMStatement | Comment]
 
-def export_assembly(program: EWVMProgram, comments: bool = True) -> str:
-    return '\n'.join(str(e) for e in program if (not isinstance(e, Comment) or comments))
+def export_assembly(program: EWVMProgram) -> str:
+    return '\n'.join(str(e) for e in program)
+
+def remove_ewvm_comments(program: EWVMProgram) -> EWVMProgram:
+    return [e for e in program if not isinstance(e, Comment)]
 
 class LabelGenerator:
     def __init__(self, call: None | CallableDefinition) -> None:

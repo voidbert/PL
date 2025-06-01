@@ -16,22 +16,52 @@
 #
 # -------------------------------------------------------------------------------------------------
 
+import argparse
 import sys
 
 from .lexer import LexerError
 from .parser import ParserError, create_parser
-from .ewvm import export_assembly, generate_ewvm_code
+from .ewvm import export_assembly, generate_ewvm_code, remove_ewvm_comments
 
 def main() -> None:
-    source = sys.stdin.read()
+    argument_parser = argparse.ArgumentParser(description='Compile Pascal for the EWVM.')
+    argument_parser.add_argument('file', nargs='?', default='-', help='path to the file to compile')
+    argument_parser.add_argument('-o', default='-', help='output assembly file')
+    argument_parser.add_argument('-O', action='store_true', help='optimize generated code')
+    argument_parser.add_argument('-g', action='store_true', help='add debug symbols')
+    args = argument_parser.parse_args()
 
     try:
-        parser = create_parser('<stdin>')
+        human_readable_filename = args.file
+
+        if args.file == '-':
+            source = sys.stdin.read()
+            human_readable_filename = '<stdin>'
+        else:
+            try:
+                with open(args.file, 'r', encoding='utf-8') as f:
+                    source = f.read()
+            except IOError:
+                print(f'Failed to open source file: {args.file}', file=sys.stderr)
+
+        parser = create_parser(human_readable_filename)
         ast = parser.parse(source)
         assembly = generate_ewvm_code(ast)
+
+        if not args.g:
+            assembly = remove_ewvm_comments(assembly)
+
         assembly_text = export_assembly(assembly)
 
-        print(assembly_text)
+        if args.o == '-':
+            print(assembly_text)
+        else:
+            try:
+                with open(args.o, 'w', encoding='utf-8') as f:
+                    f.write(assembly_text)
+            except IOError:
+                print(f'Failed to write to output file: {args.o}', file=sys.stderr)
+
     except LexerError:
         print('Lexer failed. Aborting ...', file=sys.stderr)
     except ParserError:
