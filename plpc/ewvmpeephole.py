@@ -35,10 +35,12 @@ def __optimization_pass(program: EWVMProgram) -> EWVMProgram:
             assert isinstance(next_statement, EWVMStatement)
 
             # (PUSHI 0){N} -> PUSHN N
-            if current_statement == EWVMStatement('PUSHI', 0):
+            if current_statement == EWVMStatement('PUSHI', 0) or \
+                current_statement == EWVMStatement('PUSHF', 0.0):
                 count = 0
                 while i + count < len(program):
-                    if program[i + count] != EWVMStatement('PUSHI', 0):
+                    if program[i + count] != EWVMStatement('PUSHI', 0) and \
+                        program[i + count] != EWVMStatement('PUSHF', 0.0):
                         break
                     count += 1
 
@@ -60,12 +62,18 @@ def __optimization_pass(program: EWVMProgram) -> EWVMProgram:
                     ret.append(program[i])
                     i += 2
 
-            # PUSHI 2 ; MUL -> DUP 1 ; ADD
-            elif current_statement == EWVMStatement('PUSHI', 2) and \
-                next_statement == EWVMStatement('MUL'):
+            # PUSH(I|F) 2 ; F?MUL -> DUP 1 ; F?ADD
+            elif (current_statement == EWVMStatement('PUSHI', 2) or
+                  current_statement == EWVMStatement('PUSHF', 2.0)) and \
+                (next_statement == EWVMStatement('MUL') or
+                 next_statement == EWVMStatement('FMUL')):
 
                 ret.append(EWVMStatement('DUP', 1))
-                ret.append(EWVMStatement('ADD'))
+
+                if next_statement == EWVMStatement('MUL'):
+                    ret.append(EWVMStatement('ADD'))
+                else:
+                    ret.append(EWVMStatement('FADD'))
                 i += 2
 
         if i == old_i:

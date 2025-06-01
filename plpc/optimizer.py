@@ -23,22 +23,30 @@ from typing import Any, Callable, cast, get_args
 # pylint: disable-next=wildcard-import,unused-wildcard-import
 from .ast import *
 
-def __replace_expressions(subtree: Any, replacer: Callable[[Expression], Expression]) -> Any:
+def __replace_expressions(subtree: Any,
+                          replacer: Callable[[Expression], Expression],
+                          visited: set[int]) -> Any:
+
+    if id(subtree) in visited:
+        return subtree
+    else:
+        visited.add(id(subtree))
+
     if isinstance(subtree, tuple):
         if isinstance(subtree[0], (UnaryOperation, BinaryOperation)):
             return replacer(subtree)
         else:
-            return (__replace_expressions(subtree[0], replacer), subtree[1])
+            return (__replace_expressions(subtree[0], replacer, visited), subtree[1], visited)
 
     elif isinstance(subtree, list):
-        return [__replace_expressions(element, replacer) for element in subtree]
+        return [__replace_expressions(element, replacer, visited) for element in subtree]
 
     elif is_dataclass(subtree):
         for field in fields(subtree):
             setattr(
                 subtree,
                 field.name,
-                __replace_expressions(getattr(subtree, field.name), replacer)
+                __replace_expressions(getattr(subtree, field.name), replacer, visited)
             )
 
     return subtree
@@ -55,8 +63,8 @@ def __constant_fold_expression(expression: Expression) -> Expression:
             }[expression[0].operator])
 
             return (unary_operation(sub[0]), expression[1])
-        else:
-            return (UnaryOperation(expression[0].operator, sub), expression[1])
+
+        return (UnaryOperation(expression[0].operator, sub), expression[1])
 
     elif isinstance(expression[0], BinaryOperation):
         left = __constant_fold_expression(expression[0].left)
@@ -82,10 +90,10 @@ def __constant_fold_expression(expression: Expression) -> Expression:
                 '>=': operator.ge
             }.get(expression[0].operator)
 
-            if binary_operation is None:
-                return (BinaryOperation(expression[0].operator, left, right), expression[1])
-            else:
+            if binary_operation is not None:
                 return (binary_operation(left[0], right[0]), expression[1])
+
+        return (BinaryOperation(expression[0].operator, left, right), expression[1])
 
     return expression
 
@@ -140,5 +148,8 @@ def __simplify_expression(expression: Expression) -> Expression:
     return expression
 
 def optimize_ast(program: Program) -> None:
-    __replace_expressions(program, __constant_fold_expression)
-    __replace_expressions(program, __simplify_expression)
+    __replace_expressions(
+        program,
+        lambda e: __simplify_expression(__constant_fold_expression(e)),
+        set()
+    )
