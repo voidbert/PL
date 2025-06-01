@@ -663,6 +663,23 @@ estrutura no código, pelo que não é possível apresentar a localização exat
 
 \section{Testes Realizados}
 
+Para testar o compilador, começou-se por escrever testes unitários para o analisador léxico. No
+entanto, usar esta metodologia para testar as análises sintática e semântica provou-se invável. Como
+estas são feitas em simultâneo, todos os testes precisam de ser de programas completos. Por exemplo,
+caso se deseje testar se o compilador está a interpretar corretamente a expressão \texttt{x + 4}, é
+necessário que a variável \texttt{x} se encontre declarada, o que exige o teste de um programa
+completo. Consequentemente, estes apresentam GSAs de grande dimensão, não sendo viável escrever
+testes unitários para aferir sobre o seu valor. No entanto, testes unitários foram utilizados para
+testar duas componentes utilizadas durante a análise semântica: a tabela de símbolos e o verificador
+de tipos. Mais tarde, foram utilizados testes unitários para testar a otimização de código.
+
+Os restantes testes realizados foram programas Pascal, tanto os fornecidos pela equipa docente como
+outros da autoria do grupo de trabalho, que devem ser compilados e manualmente executados na máquina
+virtual. Uma possível melhoria a estes testes seria a sua automatização com ferramentas como
+Selenium, mas isso é algo consideravelmente fora do âmbito da UC de Processamento de Linguagens,
+pelo que se optou por alocar os recursos humanos disponíveis para desenvolver outras funcionalidades
+do compilador.
+
 \section{Resultados Obtidos}
 
 O compilador desenvolvido, tal como requisitado, é capaz de transformar programas Pascal
