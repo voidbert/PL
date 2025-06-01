@@ -16,52 +16,52 @@
 #
 # --------------------------------------------------------------------------------------------------
 
-from plpc.ewvm import EWVMStatement
+from plpc.ewvm import EWVMStatement, EWVMProgram
 from plpc.ewvmpeephole import apply_ewvm_peephole_optimizations
 
-def test_multiple_push_single_integer():
-    before = [
+def test_multiple_push_single_integer() -> None:
+    before: EWVMProgram = [
         EWVMStatement('PUSHI', 0)
     ]
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('PUSHI', 0)
     ]
 
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_multiple_push_single_float():
-    before = [
+def test_multiple_push_single_float() -> None:
+    before: EWVMProgram = [
         EWVMStatement('PUSHF', 0.0)
     ]
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('PUSHF', 0.0)
     ]
 
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_multiple_push_multiple_integers_no_end():
-    before = [
+def test_multiple_push_multiple_integers_no_end() -> None:
+    before: EWVMProgram = [
         EWVMStatement('PUSHI', 0),
         EWVMStatement('PUSHI', 0),
         EWVMStatement('PUSHI', 0)
     ]
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('PUSHN', 3)
     ]
 
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_multiple_push_multiple_integers_end():
-    before = [
+def test_multiple_push_multiple_integers_end() -> None:
+    before: EWVMProgram = [
         EWVMStatement('PUSHI', 0),
         EWVMStatement('PUSHI', 0),
         EWVMStatement('PUSHI', 0),
         EWVMStatement('ADD')
     ]
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('PUSHN', 3),
         EWVMStatement('ADD')
     ]
@@ -69,27 +69,27 @@ def test_multiple_push_multiple_integers_end():
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_multiple_push_multiple_floats_no_end():
-    before = [
+def test_multiple_push_multiple_floats_no_end() -> None:
+    before: EWVMProgram = [
         EWVMStatement('PUSHF', 0.0),
         EWVMStatement('PUSHF', 0.0),
         EWVMStatement('PUSHF', 0.0),
     ]
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('PUSHN', 3)
     ]
 
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_multiple_push_multiple_floats_end():
-    before = [
+def test_multiple_push_multiple_floats_end() -> None:
+    before: EWVMProgram = [
         EWVMStatement('PUSHF', 0.0),
         EWVMStatement('PUSHF', 0.0),
         EWVMStatement('PUSHF', 0.0),
         EWVMStatement('ADD')
     ]
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('PUSHN', 3),
         EWVMStatement('ADD')
     ]
@@ -97,14 +97,14 @@ def test_multiple_push_multiple_floats_end():
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_multiple_push_multiple_mixed_1():
-    before = [
+def test_multiple_push_multiple_mixed_1() -> None:
+    before: EWVMProgram = [
         EWVMStatement('PUSHI', 0),
         EWVMStatement('PUSHF', 0.0),
         EWVMStatement('PUSHI', 0),
         EWVMStatement('ADD')
     ]
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('PUSHN', 3),
         EWVMStatement('ADD')
     ]
@@ -112,14 +112,14 @@ def test_multiple_push_multiple_mixed_1():
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_multiple_push_multiple_mixed_2():
-    before = [
+def test_multiple_push_multiple_mixed_2() -> None:
+    before: EWVMProgram = [
         EWVMStatement('PUSHF', 0.0),
         EWVMStatement('PUSHI', 0),
         EWVMStatement('PUSHF', 0.0),
         EWVMStatement('ADD')
     ]
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('PUSHN', 3),
         EWVMStatement('ADD')
     ]
@@ -127,13 +127,13 @@ def test_multiple_push_multiple_mixed_2():
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_store_push_1():
-    before = [
+def test_store_push_1() -> None:
+    before: EWVMProgram = [
         EWVMStatement('STOREL', 100),
         EWVMStatement('PUSHL', 100)
     ]
 
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('DUP', 1),
         EWVMStatement('STOREL', 100)
     ]
@@ -141,13 +141,13 @@ def test_store_push_1():
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_store_push_2():
-    before = [
+def test_store_push_2() -> None:
+    before: EWVMProgram = [
         EWVMStatement('STOREL', 100),
         EWVMStatement('PUSHL', 101)
     ]
 
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('STOREL', 100),
         EWVMStatement('PUSHL', 101)
     ]
@@ -155,13 +155,13 @@ def test_store_push_2():
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_store_push_3():
-    before = [
+def test_store_push_3() -> None:
+    before: EWVMProgram = [
         EWVMStatement('STOREL', 100),
         EWVMStatement('PUSHG', 100)
     ]
 
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('STOREL', 100),
         EWVMStatement('PUSHG', 100)
     ]
@@ -169,13 +169,13 @@ def test_store_push_3():
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_store_push_4():
-    before = [
+def test_store_push_4() -> None:
+    before: EWVMProgram = [
         EWVMStatement('STOREG', 100),
         EWVMStatement('PUSHG', 100)
     ]
 
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('DUP', 1),
         EWVMStatement('STOREG', 100)
     ]
@@ -183,14 +183,14 @@ def test_store_push_4():
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_multiplication_integer_1():
-    before = [
+def test_multiplication_integer_1() -> None:
+    before: EWVMProgram = [
         EWVMStatement('PUSHI', 2),
         EWVMStatement('PUSHI', 3),
         EWVMStatement('MUL')
     ]
 
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('PUSHI', 2),
         EWVMStatement('PUSHI', 3),
         EWVMStatement('MUL')
@@ -199,14 +199,14 @@ def test_multiplication_integer_1():
     after = apply_ewvm_peephole_optimizations(before)
     assert after == expected
 
-def test_multiplication_integer_2():
-    before = [
+def test_multiplication_integer_2() -> None:
+    before: EWVMProgram = [
         EWVMStatement('PUSHI', 3),
         EWVMStatement('PUSHI', 2),
         EWVMStatement('MUL')
     ]
 
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('PUSHI', 3),
         EWVMStatement('DUP', 1),
         EWVMStatement('ADD')
@@ -216,14 +216,14 @@ def test_multiplication_integer_2():
     print(after[0], after[1])
     assert after == expected
 
-def test_multiplication_float_1():
-    before = [
+def test_multiplication_float_1() -> None:
+    before: EWVMProgram = [
         EWVMStatement('PUSHI', 3),
         EWVMStatement('PUSHI', 2),
         EWVMStatement('FMUL')
     ]
 
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('PUSHI', 3),
         EWVMStatement('DUP', 1),
         EWVMStatement('FADD')
@@ -233,14 +233,14 @@ def test_multiplication_float_1():
     print(after[0], after[1])
     assert after == expected
 
-def test_multiplication_float_2():
-    before = [
+def test_multiplication_float_2() -> None:
+    before: EWVMProgram = [
         EWVMStatement('PUSHI', 3),
         EWVMStatement('PUSHF', 2.0),
         EWVMStatement('MUL')
     ]
 
-    expected = [
+    expected: EWVMProgram = [
         EWVMStatement('PUSHI', 3),
         EWVMStatement('DUP', 1),
         EWVMStatement('ADD')
