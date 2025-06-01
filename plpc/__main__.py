@@ -22,6 +22,7 @@ import sys
 from .lexer import LexerError
 from .parser import ParserError, create_parser
 from .ewvm import export_assembly, generate_ewvm_code, remove_ewvm_comments
+from .ewvmpeephole import apply_ewvm_peephole_optimizations
 
 def main() -> None:
     argument_parser = argparse.ArgumentParser(description='Compile Pascal for the EWVM.')
@@ -50,6 +51,9 @@ def main() -> None:
 
         if not args.g:
             assembly = remove_ewvm_comments(assembly)
+
+        if args.O:
+            assembly = apply_ewvm_peephole_optimizations(assembly)
 
         assembly_text = export_assembly(assembly)
 
