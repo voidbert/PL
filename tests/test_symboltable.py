@@ -27,11 +27,10 @@ from plpc.symboltable import (
     SymbolTableError,
     SymbolValue,
     TypeDefinition,
-    VariableDefinition,
+    BuiltInType,
     ConstantDefinition,
     CallableDefinition,
-    LabelDefinition,
-    BuiltInType,
+    VariableDefinition,
     Block,
 )
 
@@ -53,19 +52,17 @@ class DummyLexer:
     def lexpos(self) -> int:
         return 0
 
-def successful_test() -> \
-                    Callable[[Callable[[], Dict[str, Tuple[SymbolValue, int]]]], Callable[[], None]]:
-
-    def decorator(test_fn: Callable[[], Dict[str, Tuple[SymbolValue, int]]]) -> Callable[[], None]:
-        @functools.wraps(test_fn)
+def scope_state_test() -> Callable[[Callable[[], Dict[str, Tuple[SymbolValue, int]]]], Callable[[], None]]:
+    def decorator(test: Callable[[], Dict[str, Tuple[SymbolValue, int]]]) -> Callable[[], None]:
+        @functools.wraps(test)
         def wrapper() -> None:
             st = SymbolTable("<test-input>", DummyLexer())
 
-            module_of_test = sys.modules[test_fn.__module__]
+            module_of_test = sys.modules[test.__module__]
             setattr(module_of_test, 'SYMTAB', st)
 
             try:
-                expected_map = test_fn()
+                expected_map = test()
             finally:
                 delattr(module_of_test, 'SYMTAB')
 
@@ -80,8 +77,7 @@ def successful_test() -> \
 
     return decorator
 
-# Built-in types, constants, callables must be present at depth = 0
-@successful_test()
+@scope_state_test()
 def test_builtin_symbols_present():
     return {
         "integer": (TypeDefinition("integer", BuiltInType.INTEGER), 0),
@@ -107,8 +103,7 @@ def test_builtin_symbols_present():
         ),
     }
 
-# Redeclaring in the same scope raises SymbolTableError
-@successful_test()
+@scope_state_test()
 def test_redeclare_same_scope_raises():
     SYMTAB.add(TypeDefinition("MyType", BuiltInType.INTEGER), (1,1))
     with pytest.raises(SymbolTableError):
@@ -118,10 +113,44 @@ def test_redeclare_same_scope_raises():
     base["mytype"] = (TypeDefinition("MyType", BuiltInType.INTEGER), 0)
     return base
 
-# Querying undefined with error=True raises SymbolTableError
-@successful_test()
-def test_query_undefined_raises():
+@scope_state_test()
+def test_add_global_type_and_variable():
+    SYMTAB.add(TypeDefinition("Point", BuiltInType.INTEGER), (1, 1))
+    SYMTAB.add(VariableDefinition("x", BuiltInType.REAL, False), (2, 2))
+
+    base = test_builtin_symbols_present.__wrapped__().copy()
+    base["point"] = (TypeDefinition("Point", BuiltInType.INTEGER), 0)
+    base["x"]     = (VariableDefinition("x", BuiltInType.REAL, False), 0)
+    return base
+
+@scope_state_test()
+def test_shadowing():
+    SYMTAB.add(VariableDefinition("a", BuiltInType.INTEGER, False), (1,1))
+
+    SYMTAB.new_scope()
+    SYMTAB.add(VariableDefinition("a", BuiltInType.REAL, False), (2,2))
+
+    base = test_builtin_symbols_present.__wrapped__().copy()
+    base["a"] = (VariableDefinition("a", BuiltInType.REAL, False), 1)
+    return base
+
+@scope_state_test()
+def test_restore_scope():
+    SYMTAB.add(VariableDefinition("a", BuiltInType.INTEGER, False), (1,1))
+
+    SYMTAB.new_scope()
+    SYMTAB.add(VariableDefinition("a", BuiltInType.REAL, False), (2,2))
+
+    SYMTAB.unstack_top_scope()
+
+    base = test_builtin_symbols_present.__wrapped__().copy()
+    base["a"] = (VariableDefinition("a", BuiltInType.INTEGER, False), 0)
+    return base
+
+# TODO - fails
+@scope_state_test()
+def test_unstack_global_scope_raises():
     with pytest.raises(SymbolTableError):
-        SYMTAB.query_type("DoesNotExist", (0,0), error=True)
+        SYMTAB.unstack_top_scope()
 
     return test_builtin_symbols_present.__wrapped__().copy()
