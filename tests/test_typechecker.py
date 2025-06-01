@@ -28,6 +28,12 @@ from plpc.typechecker import (
     BuiltInType,
     EnumeratedTypeConstantValue,
     TypeDefinition,
+    UnaryOperation,
+    BinaryOperation,
+    ArrayType,
+    VariableUsage,
+    VariableDefinition,
+    RangeType,
 )
 
 class DummyLexer:
@@ -53,8 +59,7 @@ ExpectedMapping = Dict[
     List[ Tuple[ Tuple[Any, ...], Union[Any, type] ] ]
 ]
 
-def successful_test() -> \
-                   Callable[[Callable[[], ExpectedMapping]], Callable[[], None]]:
+def successful_test() -> Callable[[Callable[[], ExpectedMapping]], Callable[[], None]]:
     def decorator(test_fn: Callable[[], ExpectedMapping]) -> Callable[[], None]:
         @functools.wraps(test_fn)
         def wrapper() -> None:
@@ -148,5 +153,104 @@ def test_constant_ordinal_value():
             ( ('C',), ord('C') ),
             ( (enum_const,), 2 ),
             ( ((3.14,),), TypeCheckerError ),
+        ],
+    }
+
+@successful_test()
+def test_unary_operation_type():
+    u_int = UnaryOperation('+', ( (7, BuiltInType.INTEGER) ))
+    u_real = UnaryOperation('-', ( (2.5, BuiltInType.REAL) ))
+    u_bool = UnaryOperation('not', ( (False, BuiltInType.BOOLEAN) ))
+    u_bad1 = UnaryOperation('+', ( (True, BuiltInType.BOOLEAN) ))
+    u_bad2 = UnaryOperation('not', ( (5, BuiltInType.INTEGER) ))
+
+    return {
+        "get_unary_operation_type": [
+            ( (u_int, (0,1)), BuiltInType.INTEGER ),
+            ( (u_real, (0,1)), BuiltInType.REAL ),
+            ( (u_bool, (0,1)), BuiltInType.BOOLEAN ),
+            ( (u_bad1, (0,1)), TypeCheckerError ),
+            ( (u_bad2, (0,1)), TypeCheckerError ),
+        ],
+    }
+
+@successful_test()
+def test_binary_operation_type():
+    b1 = BinaryOperation('+', (5, BuiltInType.INTEGER), (2.3, BuiltInType.REAL))
+    b2 = BinaryOperation('-', (10, BuiltInType.INTEGER), (3, BuiltInType.INTEGER))
+    b3 = BinaryOperation('/', (7, BuiltInType.INTEGER), (2, BuiltInType.INTEGER))
+    b4 = BinaryOperation('div', (9, BuiltInType.INTEGER), (2, BuiltInType.INTEGER))
+    b5 = BinaryOperation('and', (True, BuiltInType.BOOLEAN), (False, BuiltInType.BOOLEAN))
+    b6 = BinaryOperation('=', (3, BuiltInType.INTEGER), (3, BuiltInType.INTEGER))
+
+    # invalid combinations
+    b_bad1 = BinaryOperation('+', (3, BuiltInType.INTEGER), (True, BuiltInType.BOOLEAN))
+    b_bad2 = BinaryOperation('or', (1, BuiltInType.INTEGER), (0, BuiltInType.INTEGER))
+    b_bad3 = BinaryOperation('<', (1, BuiltInType.INTEGER), (2.5, BuiltInType.REAL))
+
+    return {
+        "get_binary_operation_type": [
+            ( (b1, (0,1)), BuiltInType.REAL ),
+            ( (b2, (0,1)), BuiltInType.INTEGER ),
+            ( (b3, (0,1)), BuiltInType.REAL ),
+            ( (b4, (0,1)), BuiltInType.INTEGER ),
+            ( (b5, (0,1)), BuiltInType.BOOLEAN ),
+            ( (b6, (0,1)), BuiltInType.BOOLEAN ),
+            ( (b_bad1, (0,1)), TypeCheckerError ),
+            ( (b_bad2, (0,1)), TypeCheckerError ),
+            ( (b_bad3, (0,1)), TypeCheckerError ),
+        ],
+    }
+
+@successful_test()
+def test_can_assign():
+    return {
+        "can_assign": [
+            ( (BuiltInType.INTEGER, BuiltInType.INTEGER), True ),
+            ( (BuiltInType.REAL, BuiltInType.INTEGER), True ),
+            ( (BuiltInType.STRING, BuiltInType.CHAR), True ),
+            ( (BuiltInType.INTEGER, BuiltInType.REAL), False ),
+            ( (BuiltInType.BOOLEAN, BuiltInType.INTEGER), False ),
+            ( (BuiltInType.STRING, BuiltInType.INTEGER), False ),
+        ],
+    }
+
+@successful_test()
+def test_type_after_indexation():
+    array1 = ArrayType(BuiltInType.INTEGER, [RangeType(start=1, end=10, subtype=BuiltInType.INTEGER)])
+    array2 = ArrayType(BuiltInType.REAL, [
+        RangeType(start=1, end=5, subtype=BuiltInType.INTEGER),
+        RangeType(start=1, end=5, subtype=BuiltInType.INTEGER)
+    ])
+
+    return {
+        "type_after_indexation": [
+            ( (array1, BuiltInType.INTEGER, (0,1)), BuiltInType.INTEGER ),
+            ( (array2, BuiltInType.INTEGER, (0,1)), ArrayType(BuiltInType.REAL, [RangeType(1,5, BuiltInType.INTEGER)]) ),
+            ( (BuiltInType.STRING, BuiltInType.INTEGER, (0,1)), BuiltInType.CHAR ),
+            ( (array1, BuiltInType.REAL, (0,1)), TypeCheckerError ),
+            ( (BuiltInType.BOOLEAN, BuiltInType.INTEGER, (0,1)), TypeCheckerError ),
+        ],
+    }
+
+@successful_test()
+def test_fail_on_string_indexation():
+    var1 = VariableUsage(
+        VariableDefinition("tmp", BuiltInType.STRING, False),
+        BuiltInType.STRING,
+        [('A', BuiltInType.CHAR),
+         ('B', BuiltInType.CHAR)]
+    )
+
+    var2 = VariableUsage(
+        VariableDefinition("tmp", ArrayType(BuiltInType.INTEGER, [RangeType(1, 5, BuiltInType.INTEGER)]), False),
+        ArrayType(BuiltInType.INTEGER, [RangeType(1, 5, BuiltInType.INTEGER)]),
+        [(3, BuiltInType.INTEGER)]
+    )
+
+    return {
+        "fail_on_string_indexation": [
+            ( (var1, (0,1)), TypeCheckerError ),
+            ( (var2, (0,1)), None ),
         ],
     }
