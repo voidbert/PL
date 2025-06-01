@@ -232,7 +232,13 @@ class _EWVMCodeGenerator:
 
     def generate_expression_assembly(self, expression: Expression) -> None:
         if isinstance(expression[0], get_args(ConstantValue)):
-            self.generate_constant_assembly(expression[0])
+            if isinstance(expression[0], str) and \
+                len(expression[0]) == 1 and \
+                expression[1] == BuiltInType.STRING:
+
+                self.program.append(EWVMStatement('PUSHS', expression[0]))
+            else:
+                self.generate_constant_assembly(expression[0])
         elif isinstance(expression[0], VariableUsage):
             self.generate_variable_usage_assembly(expression[0], False)
         elif isinstance(expression[0], CallableCall):
