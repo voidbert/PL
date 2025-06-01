@@ -495,6 +495,37 @@ class _EWVMCodeGenerator:
             self.program.append(end_label)
             self.program.append(EWVMStatement('POP', 2))
 
+        # CASE
+        elif isinstance(statement[0], CaseStatement):
+            self.program.append(Comment('CASE'))
+            self.generate_expression_assembly(statement[0].expression)
+
+            end_label = self.label_generator.new()
+
+            for element in statement[0].elements:
+                self.program.append(EWVMStatement('PUSHI', 0))
+
+                element_end_label = self.label_generator.new()
+
+                for label_value in element.labels:
+                    self.program.append(EWVMStatement('PUSHSP'))
+                    self.program.append(EWVMStatement('LOAD', -1))
+                    self.generate_constant_assembly(label_value)
+                    self.program.append(EWVMStatement('EQUAL'))
+                    self.program.append(EWVMStatement('OR'))
+
+                self.program.append(EWVMStatement('JZ', element_end_label))
+
+                # Statement body
+                self.program.append(EWVMStatement('POP', 1))
+                self.generate_statement_assembly(element.body)
+                self.program.append(EWVMStatement('JUMP', end_label))
+                self.program.append(element_end_label)
+
+            self.program.append(EWVMStatement('POP', 1))
+            self.program.append(EWVMStatement('ERR', 'Case expression did not match'))
+            self.program.append(end_label)
+
     def generate_block_assembly(self, block: Block) -> None:
         # Block start
         if self.callable is None:

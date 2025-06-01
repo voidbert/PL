@@ -1403,6 +1403,45 @@ class _Parser:
         except SymbolTableError:
             self.has_errors = True
 
+    def p_case_statement(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        unlabeled-statement : CASE expression OF case-element-list END
+                            | CASE expression OF case-element-list ';' END
+        '''
+        p[0] = CaseStatement(p[2], p[4])
+
+    def p_case_element_list_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        case-element-list : case-element
+        '''
+        p[0] = [p[1]]
+
+    def p_case_element_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        case-element-list : case-element-list ';' case-element
+        '''
+        p[1].append(p[3])
+        p[0] = p[1]
+
+    def p_case_element(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        case-element : constant-list ':' statement
+        '''
+        p[0] = CaseElement(p[1], p[3])
+
+    def p_constant_list_single(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        constant-list : constant
+        '''
+        p[0] = [p[1]]
+
+    def p_constant_list_multiple(self, p: ply.yacc.YaccProduction) -> None:
+        '''
+        constant-list : constant-list ',' constant
+        '''
+        p[1].append(p[3])
+        p[0] = p[1]
+
     def p_unlabeled_statement_with(self, p: ply.yacc.YaccProduction) -> None:
         '''
         unlabeled-statement : WITH variable-list DO statement
