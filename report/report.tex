@@ -891,6 +891,8 @@ unlabeled-statement :
                     | callable-call
                     | begin-end-statement
                     | IF expression THEN statement if-statement-else
+                    | CASE expression OF case-element-list END
+                    | CASE expression OF case-element-list ';' END
                     | REPEAT statement-list UNTIL expression
                     | WHILE expression DO statement
                     | FOR ID ASSIGN expression TO     expression DO statement
@@ -899,6 +901,14 @@ unlabeled-statement :
 
 if-statement-else :
                   | ELSE statement
+
+case-element-list : case-element
+                  | case-element-list ';' case-element
+
+case-element : constant-list ':' statement
+
+constant-list : constant
+              | constant-list ',' constant
 
 variable-list : variable-usage
               | variable-list ',' variable-usage
