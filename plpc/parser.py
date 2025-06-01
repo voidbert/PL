@@ -1403,25 +1403,13 @@ class _Parser:
         except SymbolTableError:
             self.has_errors = True
 
-    def p_unlabeled_statement_case(self, p: ply.yacc.YaccProduction) -> None:
-        '''
-        unlabeled-statement : case-statement
-        '''
-        p[0] = p[1]
-
     def p_case_statement(self, p: ply.yacc.YaccProduction) -> None:
         '''
-        case-statement : CASE expression OF case-element-list END
-                       | CASE expression OF case-element-list ';' END
+        unlabeled-statement : CASE expression OF case-element-list END
+                            | CASE expression OF case-element-list ';' END
         '''
-        wrapped_elements = []
-        for element in p[4]:
-            wrapped_statement = (element.body, None)
-            wrapped_elements.append(CaseElement(element.labels, wrapped_statement))
+        p[0] = CaseStatement(p[2], p[4])
 
-        p[0] = CaseStatement(p[2], wrapped_elements)
-
-    # Case element list handling
     def p_case_element_list_single(self, p: ply.yacc.YaccProduction) -> None:
         '''
         case-element-list : case-element
@@ -1432,7 +1420,8 @@ class _Parser:
         '''
         case-element-list : case-element-list ';' case-element
         '''
-        p[0] = p[1] + [p[3]]
+        p[1].append(p[3])
+        p[0] = p[1]
 
     def p_case_element(self, p: ply.yacc.YaccProduction) -> None:
         '''
@@ -1450,7 +1439,8 @@ class _Parser:
         '''
         constant-list : constant-list ',' constant
         '''
-        p[0] = p[1] + [p[3]]
+        p[1].append(p[3])
+        p[0] = p[1]
 
     def p_unlabeled_statement_with(self, p: ply.yacc.YaccProduction) -> None:
         '''
