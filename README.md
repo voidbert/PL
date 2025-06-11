@@ -1,7 +1,13 @@
 # PL
 
-UMinho's 2024/25 Language Processing class assignment. See [Assignment.pdf](Assignment.pdf) for more
-details.
+A Pascal optimizing compiler for the [EWVM](https://github.com/jcramalho/EWVM), made for UMinho's
+2024/25 Language Processing class. The compiler supports scalar types and multi-dimensional arrays,
+as described by [ISO 7185:1990](https://archive.org/details/iso-iec-7185-1990-Pascal). See
+[Assignment.pdf](Assignment.pdf) for more details.
+
+Grade: 20 / 20 :star:
+
+![Screenshot comparing Pascal and EWVM code](report/res/Screenshot.png)
 
 ### Authors
 
